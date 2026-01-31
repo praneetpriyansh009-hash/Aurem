@@ -18,7 +18,7 @@ Your application is now fully restructured for professional deployment. Follow t
     - **Environment Variables**:
         - Click the "Environment Variables" section.
         - Add `VITE_GEMINI_API_KEY`
-        - Value: `AIzaSyAM5J2k_856pUW2e86euCTvC1oj8Yt1Jzs` (Or get a fresh key from Google AI Studio).
+        - Value: `YOUR_API_KEY_HERE` (Or get a fresh key from Google AI Studio).
 
 4.  **Deploy**:
     - Click **"Deploy"**.
