@@ -309,7 +309,7 @@ const QuizAssessment = ({ retryableFetch }) => {
                 7. Provide a "Mentor's Final Verdict".
             `;
 
-            const payload = formatGroqPayload(prompt, "You are an AI Learning Mentor. Provide a detailed remedial plan in Markdown.");
+            const payload = formatGroqPayload(prompt, "You are an AI Learning Mentor. Provide a detailed remedial plan. Use clear headers: ## Summary of Performance, ## Conceptual Gaps, ## Personalized Action Plan, ## Mentor's Verdict. Use ✨ for summaries and 💡 for insights. Keep it clean and tidy.");
             const result = await retryableFetch(GROQ_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -749,7 +749,36 @@ const QuizAssessment = ({ retryableFetch }) => {
 
                                 <div className="prose prose-invert max-w-none prose-p:leading-relaxed prose-headings:text-purple-500 prose-li:text-theme-secondary">
                                     <div className={`whitespace-pre-wrap font-sans text-lg text-theme-secondary ${isDark ? 'bg-white/5' : 'bg-warm-100'} p-8 rounded-3xl`} style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: 'var(--border-color)' }}>
-                                        {gradingResult}
+                                        <div className="space-y-2">
+                                            {gradingResult.split('\n').map((line, idx) => {
+                                                if (line.startsWith('## ')) {
+                                                    return <h2 key={idx} className={`text-2xl font-bold mt-6 mb-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{line.replace('## ', '')}</h2>;
+                                                }
+                                                if (line.startsWith('### ')) {
+                                                    return <h3 key={idx} className={`text-xl font-bold mt-4 mb-2 ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>{line.replace('### ', '')}</h3>;
+                                                }
+                                                if (line.includes('**')) {
+                                                    const parts = line.split(/\*\*(.+?)\*\*/g);
+                                                    return (
+                                                        <p key={idx} className="my-2 text-[17px]">
+                                                            {parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-bold text-purple-500">{p}</strong> : p)}
+                                                        </p>
+                                                    );
+                                                }
+                                                if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
+                                                    return (
+                                                        <div key={idx} className="flex gap-3 my-1.5 ml-4 text-[17px]">
+                                                            <span className="text-purple-500">•</span>
+                                                            <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
+                                                        </div>
+                                                    );
+                                                }
+                                                if (line.trim()) {
+                                                    return <p key={idx} className="my-2 text-[17px]">{line}</p>;
+                                                }
+                                                return <div key={idx} className="h-2" />;
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

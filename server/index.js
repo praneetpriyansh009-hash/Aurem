@@ -11,6 +11,7 @@ import rateLimit from 'express-rate-limit';
 console.log('[Startup] Importing routes...');
 import authRoutes from './routes/auth.js';
 import aiRoutes from './routes/ai.js';
+import ttsRoutes from './routes/tts.js';
 console.log('[Startup] Routes imported.');
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,7 +23,7 @@ dotenv.config(); // Also load root .env for any missing vars
 
 
 const app = express();
-const PORT = 5010; // Final move to a fresh port range
+const PORT = process.env.PORT || 5050; // Consolidated to port 5050
 
 // Security Middleware
 app.use(helmet()); // Set security HTTP headers
@@ -63,6 +64,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/ai', ttsRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

@@ -231,4 +231,110 @@ router.post('/groq', validateAIRequest, async (req, res) => {
     }
 });
 
+// --- Route: YouTube Transcript ---
+router.post('/youtube-transcript', async (req, res) => {
+    const { videoUrl, videoId } = req.body;
+
+    if (!videoId) {
+        return res.status(400).json({ error: 'Missing videoId' });
+    }
+
+    console.log(`[YouTube Transcript] Fetching transcript for: ${videoId}`);
+
+    try {
+        // Try to get video info and transcript using YouTube's timedtext API
+        let transcript = '';
+        let title = 'YouTube Video';
+
+        // Attempt to fetch captions using the innertube API approach
+        const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        const watchResponse = await fetchWithTimeout(watchUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9'
+            }
+        });
+
+        if (watchResponse.ok) {
+            const html = await watchResponse.text();
+
+            // Extract video title
+            const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+            if (titleMatch) {
+                title = titleMatch[1].replace(' - YouTube', '').trim();
+            }
+
+            // Extract captions URL from player response
+            const captionsMatch = html.match(/"captionTracks":\s*\[([^\]]+)\]/);
+            if (captionsMatch) {
+                const captionsData = JSON.parse(`[${captionsMatch[1]}]`);
+                const englishCaptions = captionsData.find(c =>
+                    c.languageCode === 'en' || c.languageCode?.startsWith('en')
+                ) || captionsData[0];
+
+                if (englishCaptions?.baseUrl) {
+                    // Fetch the actual transcript
+                    let captionsUrl = englishCaptions.baseUrl;
+                    // Ensure we get the transcript in text format
+                    if (!captionsUrl.includes('fmt=')) {
+                        captionsUrl += '&fmt=srv3';
+                    }
+
+                    const captionsResponse = await fetchWithTimeout(captionsUrl, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        }
+                    });
+
+                    if (captionsResponse.ok) {
+                        const captionsXml = await captionsResponse.text();
+                        // Parse XML captions and extract text
+                        const textMatches = captionsXml.match(/<text[^>]*>([^<]*)<\/text>/g);
+                        if (textMatches) {
+                            transcript = textMatches
+                                .map(m => {
+                                    const textMatch = m.match(/<text[^>]*>([^<]*)<\/text>/);
+                                    return textMatch ? textMatch[1]
+                                        .replace(/&amp;/g, '&')
+                                        .replace(/&lt;/g, '<')
+                                        .replace(/&gt;/g, '>')
+                                        .replace(/&quot;/g, '"')
+                                        .replace(/&#39;/g, "'")
+                                        .replace(/\n/g, ' ')
+                                        .trim() : '';
+                                })
+                                .filter(t => t)
+                                .join(' ');
+                        }
+                    }
+                }
+            }
+        }
+
+        if (transcript) {
+            console.log(`[YouTube Transcript] Successfully fetched ${transcript.length} chars`);
+            res.json({
+                videoId,
+                title,
+                transcript: transcript.slice(0, 50000) // Limit to 50k chars
+            });
+        } else {
+            console.log('[YouTube Transcript] No transcript available, returning placeholder');
+            res.json({
+                videoId,
+                title,
+                transcript: `[Video: ${title}]\n\nAutomatic transcript not available for this video. You can:\n1. Manually paste the video transcript in the content area\n2. Use the chat to ask questions about the video topic\n3. Try a different video with captions enabled`,
+                noTranscript: true
+            });
+        }
+    } catch (error) {
+        console.error('[YouTube Transcript] Error:', error.message);
+        res.status(500).json({
+            error: 'Failed to fetch transcript',
+            message: error.message
+        });
+    }
+});
+
 export default router;
+

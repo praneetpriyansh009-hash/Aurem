@@ -11,6 +11,8 @@ const BASIC_LIMITS = {
     'podcast': 1,
     'quiz': 2,
     'mindmap': 2,
+    'flashcards': 3,  // Aurem Lens flashcards - 3 uses per day
+    'youtube': 0,     // YouTube video loading - Premium only
     // Doubt Solver and Document Study core are UNLIMITED
 };
 

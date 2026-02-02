@@ -6,7 +6,7 @@ import fetch from 'node-fetch';
 dotenv.config();
 
 const app = express();
-const PORT = 5000;
+const PORT = 5050;
 
 // Middleware
 app.use(cors({
@@ -55,7 +55,7 @@ async function handleGroqRequest(req, res) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: GROQ_MODEL,
+                model: req.body.model || GROQ_MODEL,
                 messages: req.body.messages || []
             })
         });

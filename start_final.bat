@@ -21,8 +21,8 @@ echo Done.
 echo.
 
 echo [3/4] Starting FIXED Backend (Main)...
-start "Atlas Backend (Port 5010)" /D . cmd /k "node index.js"
-echo Backend launched on Port 5010.
+start "Atlas Backend (Port 5000)" /D . cmd /k "node index.js"
+echo Backend launched on Port 5000.
 echo.
 
 echo [4/4] Starting Frontend...

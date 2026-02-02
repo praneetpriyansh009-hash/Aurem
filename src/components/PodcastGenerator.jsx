@@ -42,13 +42,15 @@ const PodcastGenerator = () => {
     const [isPlaybackFinished, setIsPlaybackFinished] = useState(false);
 
     const fileInputRef = useRef(null);
-    const synthRef = useRef(window.speechSynthesis);
-    const utteranceRef = useRef(null);
+    // Removed synthRef/utteranceRef
 
     // --- Cleanup on Unmount ---
     useEffect(() => {
         return () => {
-            synthRef.current.cancel();
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current = null;
+            }
         };
     }, []);
 
@@ -141,85 +143,111 @@ const PodcastGenerator = () => {
         }
     };
 
-    // --- Audio Playback (Web Speech API) ---
-    const speakLine = (index) => {
-        // We use a local check for isPlaying to avoid state lag
+    // --- Audio Playback (Server-Side TTS) ---
+    const audioRef = useRef(null);
+    const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+
+    const speakLine = async (index) => {
+        // Stop any current audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+        }
+
         if (index >= podcastScript.length) {
             setIsPlaybackFinished(true);
             setIsPlaying(false);
             return;
         }
 
-        const line = podcastScript[index];
-        const utterance = new SpeechSynthesisUtterance(line.text);
+        // Set current line immediately for UI
+        setCurrentLineIndex(index);
 
-        // --- Optimized Voice Selection (The 'Gemini' Voice) ---
-        let voices = synthRef.current.getVoices();
+        // If we were paused and just resuming, we need to know if we are "in the middle". 
+        // But for simplicity in this version, we'll just restart the current line or fetch it.
+        // Ideally we cache these, but let's fetch for now.
 
-        // If voices aren't loaded yet, we'll try to wait or just use defaults
-        if (voices.length === 0) {
-            console.warn("Voices not loaded, retrying...");
-            setTimeout(() => { if (isPlaying) speakLine(index); }, 100);
-            return;
-        }
+        setIsLoadingAudio(true);
+        try {
+            // 1. Fetch Audio
+            const line = podcastScript[index];
+            const response = await retryableFetch('/api/ai/tts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: line.text,
+                    speaker: line.speaker
+                })
+            });
 
-        // Strategy: Look for "Google" voices first as they are high-quality server-side voices
-        if (line.speaker === 'Alex') {
-            utterance.pitch = 1.05;
-            utterance.rate = 1.0;
-            utterance.voice =
-                voices.find(v => v.name.includes('Google') && v.name.includes('Eng') && v.name.includes('Female')) ||
-                voices.find(v => v.name.includes('Natural') && v.name.includes('Female')) ||
-                voices.find(v => v.gender === 'female') || voices[0];
-        } else {
-            utterance.pitch = 0.95;
-            utterance.rate = 0.95;
-            utterance.voice =
-                voices.find(v => v.name.includes('Google') && v.name.includes('Eng') && v.name.includes('Male')) ||
-                voices.find(v => v.name.includes('Natural') && v.name.includes('Male')) ||
-                voices.find(v => v.gender === 'male') || voices[1];
-        }
+            if (response.error) throw new Error(response.error);
 
-        utterance.onstart = () => {
-            setCurrentLineIndex(index);
-        };
+            // 2. Play Audio
+            const audio = new Audio(response.audioData);
+            audioRef.current = audio;
 
-        utterance.onend = () => {
-            // We check ref for latest isPlaying value
-            speakLine(index + 1);
-        };
+            // Handle End of Line
+            audio.onended = () => {
+                // Check if we are still "playing" (user didn't pause)
+                if (isPlaying) {
+                    speakLine(index + 1);
+                }
+            };
 
-        utterance.onerror = (e) => {
-            console.error("Speech error:", e);
+            // Handle Errors
+            audio.onerror = (e) => {
+                console.error("Audio playback error", e);
+                setIsLoadingAudio(false);
+                setIsPlaying(false);
+            };
+
+            // Start
+            await audio.play();
+            setIsLoadingAudio(false);
+
+        } catch (error) {
+            console.error("TTS Error:", error);
+            setIsLoadingAudio(false);
             setIsPlaying(false);
-        };
-
-        utteranceRef.current = utterance;
-        synthRef.current.speak(utterance);
+            alert("Failed to play audio segment. Please check connection.");
+        }
     };
 
     const togglePlayback = () => {
         if (isPlaying) {
-            synthRef.current.cancel(); // Better than pause for our line-by-line logic
+            // PAUSE ACTION
             setIsPlaying(false);
+            if (audioRef.current) {
+                audioRef.current.pause();
+                // We don't nullify it so we *could* resume, 
+                // but our simple logic above restarts the line.
+                // To allow resume: audioRef.current.pause();
+            }
         } else {
+            // PLAY ACTION
             setIsPlaying(true);
             setIsPlaybackFinished(false);
-            const startIndex = currentLineIndex === -1 ? 0 : currentLineIndex;
 
-            // Allow a tiny delay for state to propagate if needed, though we manually call it
-            if (synthRef.current.paused) {
-                synthRef.current.resume();
+            // Resume or Start
+            if (audioRef.current && audioRef.current.paused && audioRef.current.src) {
+                audioRef.current.play().catch(e => {
+                    // If resume fails (e.g. url expired or something), restart line
+                    speakLine(currentLineIndex === -1 ? 0 : currentLineIndex);
+                });
             } else {
-                speakLine(startIndex);
+                speakLine(currentLineIndex === -1 ? 0 : currentLineIndex);
             }
         }
     };
 
     const stopPlayback = () => {
-        synthRef.current.cancel();
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+        }
         setIsPlaying(false);
         setCurrentLineIndex(-1);
+        setIsLoadingAudio(false);
     };
 
     return (
@@ -422,6 +450,7 @@ const PodcastGenerator = () => {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2">
+                                {isLoadingAudio && <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />}
                                 <span className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]' : 'bg-gray-600'}`}></span>
                                 <span className="text-[10px] font-bold text-gray-500 uppercase">REC</span>
                             </div>

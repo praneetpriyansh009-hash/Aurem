@@ -59,7 +59,7 @@ const CollegeCompass = ({ retryableFetch }) => {
                 model: "llama-3.1-8b-instant",
                 ...formatGroqPayload(
                     userQuery,
-                    "You are a creative and visionary Career Guidance Counselor. Your goal is to inspire students and provide practical, data-backed roadmaps for unique career paths that blend their diverse interests."
+                    "You are a creative and visionary Career Guidance Counselor. Your goal is to inspire students and provide practical, data-backed roadmaps. Use clear headers: ## Suggested Career Path, ## Why this fits, ## Step-by-Step Roadmap, ## Industry Outlook. Use ✨ for key takeaways and 💡 for insights."
                 )
             };
             const result = await retryableFetch(GROQ_API_URL, {
@@ -109,7 +109,7 @@ const CollegeCompass = ({ retryableFetch }) => {
                 model: "llama-3.1-8b-instant",
                 ...formatGroqPayload(
                     userQuery,
-                    "You are a world-class College Admissions Counselor. Your response must be detailed, structured using Markdown, and based on verified data. Be professional and encouraging."
+                    "You are a world-class College Admissions Counselor. Your response must be detailed and structured. Use clear headers: ## Safety/Good Fit, ## Target Recommendations, ## Reach Recommendations, ## Chance Analysis. Use ✅ for high chances and ⚠️ for risks."
                 )
             };
             const result = await retryableFetch(GROQ_API_URL, {
@@ -148,7 +148,7 @@ const CollegeCompass = ({ retryableFetch }) => {
                 model: "llama-3.1-8b-instant",
                 ...formatGroqPayload(
                     finalPrompt,
-                    "You are a friendly College Counselor AI. Provide concise answers grounded in data. Use Markdown for readability (lists, bolding)."
+                    "You are a friendly College Counselor AI. Provide concise answers grounded in data. Use clear headers (## Summary, ## Detailed Answer) and emojis (✨, 💡) for a clean look."
                 )
             };
             const result = await retryableFetch(GROQ_API_URL, {
@@ -295,9 +295,36 @@ const CollegeCompass = ({ retryableFetch }) => {
                                         <h3 className="text-xl font-bold text-theme-primary">Personal Career Roadmap</h3>
                                     </div>
                                     <div className={`prose ${isDark ? 'prose-invert text-slate-300' : 'prose-slate text-theme-secondary'} max-w-none prose-sm leading-relaxed`}>
-                                        {careerResult.split('\n').map((line, i) => (
-                                            <p key={i}>{line}</p>
-                                        ))}
+                                        <div className="space-y-1">
+                                            {careerResult.split('\n').map((line, idx) => {
+                                                if (line.startsWith('## ')) {
+                                                    return <h2 key={idx} className={`text-lg font-bold mt-4 mb-2 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{line.replace('## ', '')}</h2>;
+                                                }
+                                                if (line.startsWith('### ')) {
+                                                    return <h3 key={idx} className={`text-md font-bold mt-3 mb-1 ${isDark ? 'text-blue-400' : 'text-blue-500'}`}>{line.replace('### ', '')}</h3>;
+                                                }
+                                                if (line.includes('**')) {
+                                                    const parts = line.split(/\*\*(.+?)\*\*/g);
+                                                    return (
+                                                        <p key={idx} className="my-1.5 text-[15px]">
+                                                            {parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-bold text-indigo-500">{p}</strong> : p)}
+                                                        </p>
+                                                    );
+                                                }
+                                                if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
+                                                    return (
+                                                        <div key={idx} className="flex gap-2 my-1 ml-2 text-[15px]">
+                                                            <span className="text-indigo-500">•</span>
+                                                            <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
+                                                        </div>
+                                                    );
+                                                }
+                                                if (line.trim()) {
+                                                    return <p key={idx} className="my-1.5 text-[15px]">{line}</p>;
+                                                }
+                                                return <div key={idx} className="h-1.5" />;
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -381,7 +408,36 @@ const CollegeCompass = ({ retryableFetch }) => {
                                         <h3 className="text-xl font-bold text-theme-primary">College Recommendations</h3>
                                     </div>
                                     <div className={`prose ${isDark ? 'prose-invert text-slate-300' : 'prose-slate text-theme-secondary'} max-w-none whitespace-pre-wrap leading-relaxed`}>
-                                        {structuredResult}
+                                        <div className="space-y-1">
+                                            {structuredResult.split('\n').map((line, idx) => {
+                                                if (line.startsWith('## ')) {
+                                                    return <h2 key={idx} className={`text-lg font-bold mt-4 mb-2 ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>{line.replace('## ', '')}</h2>;
+                                                }
+                                                if (line.startsWith('### ')) {
+                                                    return <h3 key={idx} className={`text-md font-bold mt-3 mb-1 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>{line.replace('### ', '')}</h3>;
+                                                }
+                                                if (line.includes('**')) {
+                                                    const parts = line.split(/\*\*(.+?)\*\*/g);
+                                                    return (
+                                                        <p key={idx} className="my-1.5 text-[15px]">
+                                                            {parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-bold text-blue-500">{p}</strong> : p)}
+                                                        </p>
+                                                    );
+                                                }
+                                                if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
+                                                    return (
+                                                        <div key={idx} className="flex gap-2 my-1 ml-2 text-[15px]">
+                                                            <span className="text-blue-500">•</span>
+                                                            <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
+                                                        </div>
+                                                    );
+                                                }
+                                                if (line.trim()) {
+                                                    return <p key={idx} className="my-1.5 text-[15px]">{line}</p>;
+                                                }
+                                                return <div key={idx} className="h-1.5" />;
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -402,7 +458,35 @@ const CollegeCompass = ({ retryableFetch }) => {
                                             ? 'bg-gradient-to-tr from-indigo-600 to-blue-600 text-white rounded-br-none'
                                             : `${isDark ? 'bg-white/5 border-white/10 text-slate-200' : 'bg-white border-gray-200 text-theme-secondary shadow-inner'} border rounded-tl-none`
                                             }`}>
-                                            {msg.text}
+                                            {msg.role === 'user' ? msg.text : (
+                                                <div className="space-y-1">
+                                                    {msg.text.split('\n').map((line, idx) => {
+                                                        if (line.startsWith('## ')) {
+                                                            return <h2 key={idx} className={`text-sm font-bold mt-3 mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{line.replace('## ', '')}</h2>;
+                                                        }
+                                                        if (line.includes('**')) {
+                                                            const parts = line.split(/\*\*(.+?)\*\*/g);
+                                                            return (
+                                                                <p key={idx} className="my-1">
+                                                                    {parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-bold text-indigo-500">{p}</strong> : p)}
+                                                                </p>
+                                                            );
+                                                        }
+                                                        if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
+                                                            return (
+                                                                <div key={idx} className="flex gap-2 my-0.5 ml-2">
+                                                                    <span className="text-indigo-500">•</span>
+                                                                    <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        if (line.trim()) {
+                                                            return <p key={idx} className="my-1">{line}</p>;
+                                                        }
+                                                        return <div key={idx} className="h-1" />;
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

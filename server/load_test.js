@@ -1,7 +1,7 @@
 
 import fetch from 'node-fetch';
 
-const BASE_URL = 'http://localhost:5010';
+const BASE_URL = 'http://localhost:5000/api/ai';
 
 const runLoadTest = async (count, endpoint = '/') => {
     console.log(`\n--- Starting Load Test: ${count} requests to ${endpoint} ---`);

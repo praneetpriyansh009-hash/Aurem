@@ -114,17 +114,20 @@ const DoubtSolver = ({ retryableFetch }) => {
         let systemPrompt = `You are AUREM, an advanced AI study companion designed to be accurate, concise, and logical.
 
         CORE INSTRUCTIONS:
-        1. **Direct Answer**: Start with a direct answer to the user's question. Avoid meta-commentary like "Here is the answer".
-        2. **Logical Consistency**: Ensure your explanation flows logically. Do not contradict yourself.
-        3. **Tone**: Professional yet encouraging. Avoid flowery or overly dramatic language.
-        4. **Formatting**: Use bold terms for key concepts and bullet points for lists.
-        5. **Context Check**: If syllabus context is provided below, use it ONLY if it directly answers the question. If the context is irrelevant to the specific question, ignore it and answer from general knowledge.
-        6. **Vision**: If an image is provided, analyze it thoroughly to answer the user's request.
+        1. **Format**: Always use Markdown with clear headers (## Summary, ## Explanation).
+        2. **Summary**: Start with a "## Summary" section using ✨ emojis for key takeaways in bullet points.
+        3. **Explanation**: Provide a detailed "## Explanation" section using 💡 for insights and 📖 for definitions.
+        4. **Direct Answer**: Be concise and logical. Avoid meta-commentary like "Here is the answer".
+        5. **Logical Consistency**: Ensure your explanation flows logically. Do not contradict yourself.
+        6. **Tone**: Professional yet encouraging. Avoid flowery or overly dramatic language.
+        7. **Context Check**: If syllabus context is provided below, use it ONLY if it directly answers the question.
+        8. **Vision**: If an image is provided, analyze it thoroughly to answer the user's request.
 
         STRICT PROHIBITIIONS:
         - Do not hallucinate facts.
         - Do not provide irrational or disjointed statements.
-        - Do not apologize excessively.`;
+        - Do not apologize excessively.
+        - NEVER output raw text without headers. Always use '## Summary' and '## Explanation'.`;
 
         try {
             let payload;
@@ -276,7 +279,40 @@ const DoubtSolver = ({ retryableFetch }) => {
                                 )}
 
                                 <div className={`prose prose-sm max-w-none ${msg.role === 'user' ? 'prose-invert text-white/95' : 'text-theme-secondary'} font-sans leading-relaxed`}>
-                                    <div className="whitespace-pre-wrap text-[15px]">{msg.content}</div>
+                                    {msg.role === 'user' ? (
+                                        <div className="whitespace-pre-wrap text-[15px]">{msg.content}</div>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            {msg.content.split('\n').map((line, idx) => {
+                                                if (line.startsWith('## ')) {
+                                                    return <h2 key={idx} className={`text-lg font-bold mt-4 mb-2 ${isDark ? 'text-brand-primary' : 'text-indigo-600'}`}>{line.replace('## ', '')}</h2>;
+                                                }
+                                                if (line.startsWith('### ')) {
+                                                    return <h3 key={idx} className={`text-md font-bold mt-3 mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-500'}`}>{line.replace('### ', '')}</h3>;
+                                                }
+                                                if (line.includes('**')) {
+                                                    const parts = line.split(/\*\*(.+?)\*\*/g);
+                                                    return (
+                                                        <p key={idx} className="my-1.5 text-[15px]">
+                                                            {parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-bold text-brand-primary">{p}</strong> : p)}
+                                                        </p>
+                                                    );
+                                                }
+                                                if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
+                                                    return (
+                                                        <div key={idx} className="flex gap-2 my-1 ml-2 text-[15px]">
+                                                            <span className="text-brand-primary">•</span>
+                                                            <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
+                                                        </div>
+                                                    );
+                                                }
+                                                if (line.trim()) {
+                                                    return <p key={idx} className="my-1.5 text-[15px]">{line}</p>;
+                                                }
+                                                return <div key={idx} className="h-1.5" />;
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

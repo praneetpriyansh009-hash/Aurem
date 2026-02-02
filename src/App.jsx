@@ -67,7 +67,7 @@ const AppContent = () => {
             case 'login': return 'Sign In';
             case 'signup': return 'Create Account';
             case 'doubt-solver': return 'Doubt Solver';
-            case 'document-study': return 'Document Study';
+            case 'document-study': return 'Aurem Lens';
             case 'college-compass': return 'College Compass';
             case 'podcast-generator': return 'Podcast Studio';
             case 'quiz-assessment': return 'Quiz & Assessment';

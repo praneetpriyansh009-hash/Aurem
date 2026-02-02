@@ -1,9 +1,10 @@
 // Auto-detect environment: Use relative path for Vercel, localhost for dev
 const isProduction = import.meta.env.PROD;
-export const API_BASE_URL = isProduction ? '/api' : 'http://localhost:5010/api';
+export const API_BASE_URL = isProduction ? '/api' : 'http://localhost:5050/api';
 export const GEMINI_API_URL = `${API_BASE_URL}/ai/gemini`;
 export const GROQ_API_URL = `${API_BASE_URL}/ai/groq`;
 export const PODCAST_API_URL = `${API_BASE_URL}/ai/podcast`;
+export const YOUTUBE_TRANSCRIPT_URL = `${API_BASE_URL}/ai/youtube-transcript`;
 
 export const formatGroqPayload = (userContent, systemContent) => {
     return {

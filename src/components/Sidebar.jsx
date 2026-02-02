@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
-import { Bot, FileText, LogOut, Moon, Sun, ChevronRight, ChevronLeft, GraduationCap, FilePlus, ClipboardList, Mic, Sparkles, Crown } from './Icons';
+import { Bot, FileText, LogOut, Moon, Sun, ChevronRight, ChevronLeft, GraduationCap, FilePlus, ClipboardList, Mic, Sparkles, Crown, Eye } from './Icons';
 
 const Sidebar = ({ currentView, setCurrentView, isSidebarOpen, setIsSidebarOpen, isCollapsed, setIsCollapsed, user, onLogin, onLogout }) => {
     const { isDark, toggleTheme } = useTheme();
@@ -9,11 +9,12 @@ const Sidebar = ({ currentView, setCurrentView, isSidebarOpen, setIsSidebarOpen,
 
     const navItems = [
         { id: 'doubt-solver', label: 'Doubt Solver', icon: Bot, section: 'section-doubt' },
-        { id: 'document-study', label: 'Document Study', icon: FilePlus, section: 'section-document' },
+        { id: 'document-study', label: 'Aurem Lens', icon: Eye, section: 'section-document' },
         { id: 'podcast-generator', label: 'Podcast Studio', icon: Mic, section: 'section-podcast' },
         { id: 'college-compass', label: 'College Compass', icon: GraduationCap, section: 'section-compass' },
         { id: 'quiz-assessment', label: 'Quiz & Assessment', icon: ClipboardList, section: 'section-quiz' },
     ];
+
 
     return (
         <>
