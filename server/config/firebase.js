@@ -33,8 +33,12 @@ try {
         console.log("Firebase Admin initialized with service account file.");
     } else {
         // Fallback: Initialize with default credentials
-        console.warn("Warning: No Firebase credentials found (env or file). Using default fallback.");
-        admin.initializeApp();
+        if (process.env.VERCEL) {
+            console.warn("Vercel environment detected without credentials. Skipping Firebase initialization to prevent crash.");
+        } else {
+            console.warn("Warning: No Firebase credentials found (env or file). Using default fallback.");
+            admin.initializeApp();
+        }
     }
 } catch (error) {
     console.error("Firebase Admin Initialization Error:", error.message);

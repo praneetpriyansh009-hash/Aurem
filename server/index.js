@@ -83,12 +83,16 @@ if (process.env.NODE_ENV === 'production') {
 // Change 'localhost' to '127.0.0.1'
 const MONGODB_URI = process.env.MONGODB_URI;
 
-if (MONGODB_URI) {
+// Check if we are in production/Vercel and trying to connect to localhost (which fails)
+const isLocalhostDb = MONGODB_URI?.includes('localhost') || MONGODB_URI?.includes('127.0.0.1');
+const shouldConnect = MONGODB_URI && (!process.env.VERCEL || !isLocalhostDb);
+
+if (shouldConnect) {
     mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
         .then(() => console.log('MongoDB Connected'))
         .catch(err => console.error('MongoDB Connection Error:', err.message));
 } else {
-    console.log('MongoDB URI not found. Skipping database connection. Auth features will be disabled.');
+    console.log('MongoDB URI missing or invalid for production. Skipping database connection.');
 }
 
 // Basic Route
