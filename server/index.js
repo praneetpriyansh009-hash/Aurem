@@ -1,5 +1,6 @@
 import express from 'express';
-console.log('--- BACKEND BOOTING UP ---');
+console.log('--- BACKEND BOOTING UP: ' + new Date().toLocaleTimeString() + ' ---');
+console.log('--- VERIFICATION VERSION: 9.0 ---');
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -11,7 +12,7 @@ import rateLimit from 'express-rate-limit';
 console.log('[Startup] Importing routes...');
 import authRoutes from './routes/auth.js';
 import aiRoutes from './routes/ai.js';
-import ttsRoutes from './routes/tts.js';
+// import ttsRoutes from './routes/tts.js';
 console.log('[Startup] Routes imported.');
 
 const __filename = fileURLToPath(import.meta.url);
@@ -42,7 +43,7 @@ app.use('/api', limiter); // Apply to all API routes
 const corsOptions = {
     origin: process.env.NODE_ENV === 'production'
         ? process.env.ALLOWED_ORIGINS?.split(',') || true
-        : ['http://localhost:8080', 'http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:8080'],
+        : ['http://localhost:8080', 'http://localhost:8081', 'http://localhost:8082', 'http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:8080'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
@@ -64,7 +65,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
-app.use('/api/ai', ttsRoutes);
+// app.use('/api/ai', ttsRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

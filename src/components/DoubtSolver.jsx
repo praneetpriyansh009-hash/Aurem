@@ -174,8 +174,9 @@ const DoubtSolver = ({ retryableFetch }) => {
             });
 
             if (result.error) {
-                const errMsg = typeof result.error === 'string' ? result.error : JSON.stringify(result.error);
-                throw new Error(errMsg);
+                const detailedMsg = result.message ? `${result.error}: ${result.message}` :
+                    (typeof result.error === 'string' ? result.error : JSON.stringify(result.error));
+                throw new Error(detailedMsg);
             }
 
             const responseText = result.choices?.[0]?.message?.content || "I couldn't generate a response. Please try again.";

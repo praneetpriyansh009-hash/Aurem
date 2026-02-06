@@ -14,6 +14,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import { Bot, GraduationCap, FileText, Menu, LogIn, FilePlus, Mic, Sparkles, ClipboardList } from './components/Icons';
 import { useRetryableFetch } from './utils/api';
+import SamplePaperGenerator from './components/SamplePaperGenerator';
 
 const AppContent = () => {
     const { isDark } = useTheme();
@@ -56,7 +57,9 @@ const AppContent = () => {
             case 'podcast-generator':
                 return <PodcastGenerator retryableFetch={retryableFetch} />;
             case 'quiz-assessment':
-                return <QuizAssessment retryableFetch={retryableFetch} />;
+                return <QuizAssessment retryableFetch={retryableFetch} onNavigate={setCurrentView} />;
+            case 'sample-paper':
+                return <SamplePaperGenerator retryableFetch={retryableFetch} />;
             default:
                 return <DoubtSolver retryableFetch={retryableFetch} />;
         }
@@ -71,6 +74,7 @@ const AppContent = () => {
             case 'college-compass': return 'College Compass';
             case 'podcast-generator': return 'Podcast Studio';
             case 'quiz-assessment': return 'Quiz & Assessment';
+            case 'sample-paper': return 'Smart Paper Generator';
             default: return 'Aurem';
         }
     };
@@ -84,6 +88,7 @@ const AppContent = () => {
             case 'college-compass': return <GraduationCap className="w-5 h-5 mr-2 text-sky-500" />;
             case 'podcast-generator': return <Mic className="w-5 h-5 mr-2 text-rose-500" />;
             case 'quiz-assessment': return <ClipboardList className="w-5 h-5 mr-2 text-emerald-500" />;
+            case 'sample-paper': return <FileText className="w-5 h-5 mr-2 text-purple-600" />;
             default: return <Sparkles className="w-5 h-5 mr-2 text-orange-500" />;
         }
     };
@@ -117,7 +122,7 @@ const AppContent = () => {
 
             <div className={`
                 flex-1 flex flex-col h-full relative z-10 transition-all duration-300
-                ${currentUser ? 'md:my-[2vh] md:mr-[2vh] md:rounded-3xl border border-white/10 shadow-2xl overflow-hidden glass-panel' : ''}
+                ${currentUser ? 'md:my-[2vh] md:mr-[2vh] md:rounded-3xl md:border md:border-white/10 md:shadow-2xl overflow-hidden md:glass-panel' : ''}
             `}>
                 {currentUser && (
                     <header className="md:hidden glass-panel p-4 shadow-xl flex items-center z-30 sticky top-0 border-b border-white/5">

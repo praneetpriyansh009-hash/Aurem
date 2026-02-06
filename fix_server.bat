@@ -1,0 +1,13 @@
+@echo off
+echo Fixing Port 5050 conflict...
+for /f "tokens=5" %%a in ('netstat -aon ^| find ":5050" ^| find "LISTENING"') do (
+    echo Killing process %%a...
+    taskkill /f /pid %%a
+)
+echo.
+echo waiting for port to clear...
+timeout /t 2 /nobreak > nul
+echo.
+echo Starting Server...
+cd server
+node standalone_server.js

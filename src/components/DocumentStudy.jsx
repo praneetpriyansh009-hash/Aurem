@@ -167,16 +167,20 @@ const DocumentStudy = () => {
                 body: JSON.stringify({ videoUrl, videoId })
             });
 
-            if (response.error) {
-                throw new Error(response.error);
-            }
-
             setVideoData({
                 id: videoId,
                 title: response.title || 'YouTube Video',
                 thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
             });
-            setDocumentContent(response.transcript || '[Video transcript loaded]');
+
+            // Handle transcript availability
+            if (response.transcript && !response.noTranscript) {
+                setDocumentContent(response.transcript);
+            } else {
+                // No transcript available - set helpful context for AI
+                setDocumentContent(`[YouTube Video ID: ${videoId}]\n\nThis is a YouTube video. The automatic transcript is not available.\n\n📝 You can:\n1. Paste the video transcript manually in this text area\n2. Describe what the video is about for AI analysis\n3. Ask questions about the topic and the AI will help based on your description\n\nTip: Many YouTube videos have manual captions you can copy from the video page.`);
+            }
+
             setChatMessages([]);
             setResult('');
             setFlashcards([]);
@@ -189,7 +193,7 @@ const DocumentStudy = () => {
                 title: 'YouTube Video',
                 thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
             });
-            setDocumentContent(`[YouTube Video: ${videoId}]\n\nNote: Automatic transcript extraction failed. You can manually paste the video transcript in the content area below, or use the chat to ask questions about the video topic.`);
+            setDocumentContent(`[YouTube Video: ${videoId}]\n\nNote: Could not load video data. You can manually paste the video transcript or description in the content area below, or use the chat to ask questions about the video topic.`);
         } finally {
             setIsVideoLoading(false);
         }
@@ -438,15 +442,15 @@ RULES:
         <div className={`h-full ${isDark ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'} font-sans transition-colors duration-300 overflow-y-auto custom-scrollbar`}>
 
             {/* Header - Animate Enter */}
-            <div className="py-6 text-center animate-enter">
-                <div className="flex items-center justify-center gap-3 mb-1">
-                    <Eye className="w-8 h-8 text-orange-500" />
-                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-amber-500">Aurem Lens</h1>
+            <div className="py-4 md:py-6 text-center animate-enter">
+                <div className="flex items-center justify-center gap-2 md:gap-3 mb-1">
+                    <Eye className="w-6 h-6 md:w-8 md:h-8 text-orange-500" />
+                    <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-amber-500">Aurem Lens</h1>
                 </div>
-                <p className="text-[10px] font-bold tracking-[0.2em] text-gray-500 uppercase">Upload Documents or Videos for AI-Powered Analysis & Study</p>
+                <p className="text-[9px] md:text-[10px] font-bold tracking-[0.15em] md:tracking-[0.2em] text-gray-500 uppercase px-4">Upload Documents or Videos for AI Analysis</p>
             </div>
 
-            <div className="max-w-5xl mx-auto w-full px-6 pb-12 flex flex-col">
+            <div className="max-w-5xl mx-auto w-full px-3 md:px-6 pb-8 md:pb-12 flex flex-col">
 
                 {/* Upload Area - Delayed Enter */}
                 <div
@@ -458,7 +462,7 @@ RULES:
                         setIsDragging(false);
                         processFile(e.dataTransfer.files?.[0]);
                     }}
-                    className={`relative shrink-0 mb-4 border-2 border-dashed rounded-3xl p-8 text-center cursor-pointer transition-all duration-300 group animate-enter opacity-0 delay-100 fill-mode-forwards
+                    className={`relative shrink-0 mb-4 border-2 border-dashed rounded-2xl md:rounded-3xl p-4 md:p-8 text-center cursor-pointer transition-all duration-300 group animate-enter opacity-0 delay-100 fill-mode-forwards
                         ${isDragging ? 'border-orange-500 bg-orange-500/10' : isDark ? 'border-gray-800 bg-gray-900/50 hover:border-gray-700' : 'border-gray-300 bg-white hover:border-orange-400'}
                     `}
                     style={{ animationFillMode: 'forwards' }}
@@ -592,7 +596,7 @@ RULES:
                     {activeTab === 'tools' && (
                         <div className="space-y-6">
                             {/* Action Grid - Staggered Animation */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 gap-2 md:gap-4">
                                 {[
                                     { id: 'summarize', label: 'Summarize', icon: FileText },
                                     { id: 'explain', label: 'Explain', icon: Lightbulb },

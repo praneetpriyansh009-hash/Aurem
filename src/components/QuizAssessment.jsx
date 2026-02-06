@@ -6,52 +6,60 @@ import { GROQ_API_URL, formatGroqPayload } from '../utils/api';
 import CloudService from '../utils/cloudService';
 import RagService from '../utils/ragService';
 import { MOCK_SYLLABUS } from '../data/mockData';
-import * as pdfjsLib from 'pdfjs-dist';
+import SamplePaperGenerator from './SamplePaperGenerator';
 
-const QuizAssessment = ({ retryableFetch }) => {
+
+
+const QuizAssessment = ({ retryableFetch, onNavigate }) => {
     const { isDark } = useTheme();
     const { canUseFeature, incrementUsage, triggerUpgradeModal, isPro, getRemainingUses } = useSubscription();
+    const [viewMode, setViewMode] = useState('quiz'); // 'quiz' or 'paper-gen'
     const [step, setStep] = useState('setup'); // setup, taking, grading, result
-    const [mode, setMode] = useState('standard'); // 'standard' or 'similar-paper'
     const [config, setConfig] = useState({
         curriculum: 'CBSE', // CBSE or ICSE
-        subject: '', // The broader subject (e.g., Physics)
-        topic: '', // The specific chapter/topic (e.g., Electricity)
+        classGrade: '10', // 9, 10, 11, 12
+        subject: '',
+        topic: '',
         difficulty: 'Medium',
         count: 5,
         type: 'Both',
-        docId: 'internal' // 'internal' for AI data, or a doc ID for RAG
+        docId: 'internal'
     });
     const [documents, setDocuments] = useState([]);
     const [quizData, setQuizData] = useState(null);
     const [answers, setAnswers] = useState({});
-    const [gradingResult, setGradingResult] = useState(null); // Now a Markdown string or JSON
+    const [gradingResult, setGradingResult] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [assessmentStats, setAssessmentStats] = useState(null);
 
-    // Similar Paper state
-    const [samplePaper, setSamplePaper] = useState(null);
-    const [samplePaperText, setSamplePaperText] = useState('');
-    const [similarPattern, setSimilarPattern] = useState('Mixed'); // Objective, Subjective, Mixed
-    const fileInputRef = useRef(null);
-
     useEffect(() => {
-        const cloudDocs = CloudService.getAllDocuments();
-        const virtualDocs = [
-            { id: 'internal', name: 'Official Board Curriculum (AI)', content: 'AI_INTERNAL' },
-            ...cloudDocs
-        ];
-        setDocuments(virtualDocs);
+        const loadDocs = async () => {
+            try {
+                const docs = await CloudService.listDocuments();
+                setDocuments(docs);
+            } catch (e) {
+                console.error("Failed to load documents", e);
+            }
+        };
+        loadDocs();
     }, []);
 
-    const handleConfigChange = (e) => setConfig({ ...config, [e.target.name]: e.target.value });
+    const handleConfigChange = (e) => {
+        const { name, value } = e.target;
+        let newConfig = { ...config, [name]: value };
 
-    // Generate Quiz using RAG + Ollama
+        // Auto-switch to Mixed for Full Length Test
+        if (name === 'count' && parseInt(value) === 35) {
+            newConfig.type = 'Mixed';
+        }
+
+        setConfig(newConfig);
+    };
+
     const generateQuiz = async (e) => {
         e.preventDefault();
 
-        // Check usage limits (Basic: 2/day)
         if (!canUseFeature('quiz')) {
             triggerUpgradeModal('quiz');
             return;
@@ -61,45 +69,214 @@ const QuizAssessment = ({ retryableFetch }) => {
         setError(null);
 
         try {
-            let retrievedContext = "";
-            let systemInstruction = `You are a specialized Exam Paper Setter for ${config.curriculum} Board. Use your internal training data.`;
+            // Intelligent Logic Construction
+            let structuralInstructions = "";
+            let qualityInstructions = "Ensure questions are non-repetitive, conceptually deep, and free of ambiguity.";
+            let isFullLength = parseInt(config.count) === 35;
+            let isSenior = ['11', '12'].includes(config.classGrade);
+            let isScienceMath = /physics|math|chem/i.test(config.subject);
 
+            let mimicContext = "";
             if (config.docId !== 'internal') {
-                const selectedDoc = documents.find(d => d.id === config.docId);
-                if (selectedDoc) {
-                    retrievedContext = await RagService.retrieveContext(config.subject || selectedDoc.name, selectedDoc);
-                    systemInstruction = "You are a specialized Exam Paper Setter. Generate the quiz based ONLY on the provided document context.";
+                const doc = await CloudService.getDocument(config.docId);
+                if (doc) {
+                    mimicContext = `
+                     STYLE REFERENCE (SAMPLE PAPER):
+                     ${doc.content.substring(0, 15000)}
+                     
+                     INSTRUCTION: Analyze the above Sample Paper. Create a NEW assessment that mimics its exact Difficulty, Question Types, and Phrasing Style. 
+                     Do NOT copy questions. Create ORIGINAL questions for the Topic: "${config.topic}" that feel like they belong in this sample paper.
+                     `;
                 }
             }
 
-            // 2. Build Prompt
+            // 1. Define Difficulty & Style Profile based on User Request
+            if (!mimicContext) {
+                // JEE is ONLY for Physics, Chemistry, Maths in Class 11-12
+                const isJEEEligible = isSenior && isScienceMath;
+
+                // Difficulty Logic
+                if (config.difficulty === 'Easy') {
+                    qualityInstructions = "LEVEL: EASY (BOARD/SCHOOL EXAM). Focus on Theory, Definitions, and Direct Concepts. 90% Theory / 10% Very Basic Numericals. Avoid complex calculations.";
+                } else if (config.difficulty === 'Medium') {
+                    qualityInstructions = "LEVEL: MEDIUM (STANDARD BOARD). EXACTLY 50% Theory (Conceptual) and 50% Numericals. Numericals should increase in difficulty from basic to moderate application.";
+                } else if (config.difficulty === 'Hard') {
+                    if (isJEEEligible) {
+                        // JEE Advanced Level for Physics/Chemistry/Maths Class 11-12
+                        qualityInstructions = `
+                        🔥 LEVEL: HARD (JEE ADVANCED / OLYMPIAD LEVEL) 🔥
+                        
+                        MANDATORY REQUIREMENTS:
+                        - 100% NUMERICAL PROBLEMS - NO direct theory questions
+                        - Every question must combine 2-3 concepts from the chapter
+                        - Questions should require 3-5 steps minimum to solve
+                        - Include problems that require deriving formulas, not just applying them
+                        - Add tricky conditions (friction, resistance, real-world constraints)
+                        
+                        QUESTION DIFFICULTY EXAMPLES:
+                        - Physics: Projectile on inclined plane with air resistance, Combination of SHM, Rotational + Translational motion combined
+                        - Chemistry: Equilibrium with Le Chatelier shifts, Multi-step organic synthesis, Buffer calculations with back-titration
+                        - Maths: Integration requiring substitution + partial fractions, Complex number geometry, Probability with permutations
+                        
+                        DO NOT CREATE:
+                        ❌ Direct formula substitution (like "Find velocity if s=10, t=2")
+                        ❌ Single-concept problems
+                        ❌ NCERT textbook example-level questions
+                        ❌ Questions solvable in 1-2 steps
+                        
+                        EACH QUESTION SHOULD MAKE A JEE ASPIRANT THINK FOR 3-5 MINUTES.
+                        `;
+                    } else {
+                        // Tough CBSE/ICSE Board Level for ALL other subjects/classes
+                        qualityInstructions = `
+                        LEVEL: HARD (CHALLENGING ${config.curriculum} BOARD)
+                        - Focus on HOTS (Higher Order Thinking Skills)
+                        - Application-based problems requiring analysis
+                        - Case-study type questions
+                        - Questions that test deep understanding, not rote learning
+                        - 70% Application/Analysis / 30% Conceptual
+                        `;
+                    }
+                }
+
+                // Structure Logic
+                if (isFullLength) {
+                    structuralInstructions = `
+                    STRICT MANDATE: GENERATE EXACTLY 35 QUESTIONS.
+                    Structure:
+                    - Section A: 15 MCQs (1-mark). 
+                    - Section B: 8 Very Short (2-marks).
+                    - Section C: 6 Short (3-marks).
+                    - Section D: 4 Long (5-marks).
+                    - Section E: 2 Case-Based (4-marks).
+                    `;
+                } else {
+                    if (config.type === 'Objective') {
+                        structuralInstructions = `Generate EXACTLY ${config.count} Questions. ALL MUST BE Multiple Choice Questions (MCQs) with 4 options. 1 Mark each. NO Subjective questions.`;
+                    } else if (config.type === 'Subjective') {
+                        structuralInstructions = `Generate EXACTLY ${config.count} Questions. ALL MUST BE Subjective (Short/Long Answer). NO MCQs. Mix of 3-mark and 5-mark questions.`;
+                    } else { // Mixed
+                        structuralInstructions = `Generate EXACTLY ${config.count} Questions. Divide into sections: Section A (MCQs) and Section B (Subjective).`;
+                    }
+                }
+
+                // Image/Visual Constraint
+                if (config.difficulty === 'Hard' || config.difficulty === 'Medium') {
+                    qualityInstructions += " Include Visual/Diagram-based questions where relevant (describe the image in 'image_description').";
+                }
+            }
+            // Build subject-specific instructions
+            let subjectPatterns = '';
+            const subjectLower = config.subject.toLowerCase();
+
+            if (subjectLower.includes('english')) {
+                subjectPatterns = `
+                ENGLISH PAPER PATTERN (${config.curriculum} CLASS ${config.classGrade}):
+                - MUST include 1-2 Unseen Passage/Comprehension questions (read passage + answer questions)
+                - Include Grammar-based MCQs (tenses, voice, articles, prepositions, etc.)
+                - Include Literature-based questions from Class ${config.classGrade} ${config.curriculum} syllabus ONLY
+                - Include Writing Skills questions (letter, essay, notice, etc.) for subjective
+                - DO NOT use poems/chapters from other classes
+                `;
+            } else if (subjectLower.includes('physics') || subjectLower.includes('chemistry') || subjectLower.includes('math')) {
+                subjectPatterns = `
+                SCIENCE/MATH PATTERN (${config.curriculum} CLASS ${config.classGrade}):
+                - Questions MUST be from Class ${config.classGrade} ${config.curriculum} syllabus ONLY
+                - Include Conceptual MCQs testing understanding of principles
+                - Include Numerical problems with step-by-step application
+                - Include Diagram/Visual-based questions where relevant
+                - Use formulas and concepts taught in Class ${config.classGrade} ONLY, not higher classes
+                `;
+            } else if (subjectLower.includes('biology') || subjectLower.includes('science')) {
+                subjectPatterns = `
+                BIOLOGY/SCIENCE PATTERN (${config.curriculum} CLASS ${config.classGrade}):
+                - Questions MUST be from Class ${config.classGrade} ${config.curriculum} syllabus ONLY
+                - Include Diagram-based questions (label parts, identify structures)
+                - Include Assertion-Reason type MCQs
+                - Include Case-Study based questions for full papers
+                - Test understanding of processes, cycles, and biological concepts
+                `;
+            } else if (subjectLower.includes('social') || subjectLower.includes('history') || subjectLower.includes('geography') || subjectLower.includes('civics')) {
+                subjectPatterns = `
+                SOCIAL SCIENCE PATTERN (${config.curriculum} CLASS ${config.classGrade}):
+                - Questions MUST be from Class ${config.classGrade} ${config.curriculum} syllabus ONLY
+                - Include Map-based questions for Geography
+                - Include Source-based questions for History
+                - Include Case-Study questions for Civics/Political Science
+                - Test factual knowledge, dates, events, concepts specific to Class ${config.classGrade}
+                `;
+            }
+
             const prompt = `
-                Generate a ${config.difficulty} difficulty ${config.curriculum} board assessment.
-                Subject: ${config.subject}
-                Chapter/Topic: ${config.topic}
-                Total Questions: ${config.count}
-                Question Style: ${config.type}
+                ⚠️ CRITICAL CONSTRAINTS - READ CAREFULLY:
                 
-                ${retrievedContext ? `DOCUMENT CONTEXT:\n${retrievedContext}` : "Use your internal knowledge of the latest official NCERT/ICSE curriculum."}
+                1. CLASS LEVEL: You are generating questions for CLASS ${config.classGrade} ONLY.
+                   - DO NOT include ANY content from Class ${parseInt(config.classGrade) + 1} or higher
+                   - DO NOT include ANY content from Class ${parseInt(config.classGrade) - 1} or lower
+                   - Every question MUST be answerable by a Class ${config.classGrade} student using ONLY their Class ${config.classGrade} textbook
                 
-                Respond ONLY with a valid JSON object matching this schema:
+                2. BOARD: ${config.curriculum} Board
+                   - Follow ${config.curriculum} exam pattern EXACTLY
+                   - Use ${config.curriculum} textbook chapter references
+                   - Question style should match ${config.curriculum} board papers
+                
+                3. SUBJECT: ${config.subject}
+                4. TOPIC/CHAPTER: ${config.topic}
+                5. DIFFICULTY: ${config.difficulty}
+                
+                ${subjectPatterns}
+                
+                ${mimicContext ? mimicContext : `STRUCTURAL INSTRUCTIONS:
+                ${structuralInstructions}
+                
+                QUALITY INSTRUCTIONS:
+                ${qualityInstructions}`}
+                
+                🚨 VALIDATION CHECKLIST (All must be TRUE):
+                - [ ] Every question is from Class ${config.classGrade} ${config.curriculum} syllabus
+                - [ ] No advanced concepts from higher classes
+                - [ ] Questions match ${config.curriculum} board paper format
+                - [ ] Difficulty matches "${config.difficulty}" level
+                - [ ] Topic "${config.topic}" is covered correctly
+                
+                Respond ONLY with valid JSON (no markdown, no explanation):
                 {
-                  "quiz_metadata": {"subject": "${config.subject}", "topic": "${config.topic}", "difficulty": "${config.difficulty}", "board": "${config.curriculum}"},
+                  "quiz_metadata": {
+                    "subject": "${config.subject}",
+                    "topic": "${config.topic}",
+                    "difficulty": "${config.difficulty}",
+                    "board": "${config.curriculum}",
+                    "class": "${config.classGrade}"
+                  },
                   "questions": [
                     {
-                      "id": number,
+                      "id": 1,
+                      "section": "Section A",
+                      "marks": 1,
                       "type": "objective",
-                      "question": "string",
-                      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-                      "correct_answer": "One of the options exactly",
+                      "question": "Your question text here",
+                      "image_description": "Optional: Description of diagram if visual question",
+                      "options": ["A) Option 1", "B) Option 2", "C) Option 3", "D) Option 4"],
+                      "correct_answer": "A) Option 1",
                       "explanation": "Brief explanation"
                     }
                   ]
                 }
+                
+                Generate EXACTLY ${config.count} questions.
             `;
 
-            // 3. Call Groq
-            const payload = formatGroqPayload(prompt, systemInstruction);
+            // Call Groq with strict class-level system message
+            const systemMessage = `You are a Senior ${config.curriculum} Board Exam Paper Setter with 20+ years of experience. 
+            
+CRITICAL RULES:
+1. You ONLY create questions for CLASS ${config.classGrade} ${config.curriculum} syllabus
+2. You NEVER include content from higher or lower classes
+3. You follow ${config.curriculum} board exam patterns EXACTLY
+4. Every question must be solvable using Class ${config.classGrade} textbook knowledge ONLY
+
+You will be FIRED if you include content from wrong class levels.`;
+            const payload = formatGroqPayload(prompt, systemMessage);
             const result = await retryableFetch(GROQ_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -107,695 +284,432 @@ const QuizAssessment = ({ retryableFetch }) => {
             });
 
             const text = result.choices?.[0]?.message?.content || "";
+            const parsedQuiz = RagService.extractJson(text);
 
-            try {
-                const parsedQuiz = RagService.extractJson(text);
-                setQuizData(parsedQuiz);
-                setStep('taking');
-                // Track usage after successful quiz generation
-                incrementUsage('quiz');
-            } catch (e) {
-                console.error("Quiz Parse Error:", e, "Raw Text:", text);
-                throw new Error("AI returned an invalid quiz format. Please try again.");
+            // Post-processing to ensure sections exist if missing in simple mode
+            if (!parsedQuiz.questions[0].section) {
+                parsedQuiz.questions.forEach(q => q.section = "Practice Section");
             }
+
+            setQuizData(parsedQuiz);
+            setStep('taking');
+            incrementUsage('quiz');
+
         } catch (err) {
-            setError(err.message || "Failed to generate RAG quiz.");
+            console.error("Quiz Gen Error:", err);
+            setError(err.message || "Failed to generate assessment. Please try again.");
         } finally { setIsLoading(false); }
     };
 
-    // Handle file upload for similar paper
-    const handleFileUpload = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setSamplePaper(file);
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            let extractedText = '';
-
-            if (file.type === 'application/pdf') {
-                // Extract text from PDF
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-                for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(' ');
-                    extractedText += pageText + '\n\n';
-                }
-            } else if (file.type.startsWith('image/')) {
-                // For images, we'll use a placeholder message
-                extractedText = '[Image file uploaded - OCR not yet implemented]';
-            }
-
-            setSamplePaperText(extractedText);
-        } catch (err) {
-            setError('Failed to extract text from file: ' + err.message);
-            setSamplePaper(null);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Generate similar paper from sample
-    const generateSimilarPaper = async (e) => {
-        e.preventDefault();
-
-        if (!samplePaperText) {
-            setError('Please upload a sample paper first');
-            return;
-        }
-
-
-        // Check usage limits (Basic: 2/day)
-        if (!canUseFeature('quiz')) {
-            triggerUpgradeModal('quiz');
-            return;
-        }
-
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            const patternInstruction = similarPattern === 'Objective'
-                ? 'Generate ONLY objective/MCQ questions with 4 options each.'
-                : similarPattern === 'Subjective'
-                    ? 'Generate ONLY subjective/theory questions requiring detailed answers.'
-                    : 'Generate a MIX of objective (MCQ) and subjective questions.';
-
-            const prompt = `
-                Analyze this sample test paper and generate a NEW test with SIMILAR but NOT IDENTICAL questions.
-                
-                SAMPLE PAPER TEXT:
-                ${samplePaperText.substring(0, 8000)} 
-                
-                QUESTION PATTERN REQUIRED: ${similarPattern}
-                ${patternInstruction}
-                
-                Your task:
-                1. Identify the difficulty level (Easy/Medium/Hard)
-                2. Identify topics and question types
-                3. Generate ${config.count} NEW questions that:
-                   - Match the same difficulty level
-                   - Cover similar topics
-                   - Follow the specified pattern: ${similarPattern}
-                   - Are NOT copies of the original questions
-                
-                Respond ONLY with a valid JSON object matching this schema:
-                {
-                  "quiz_metadata": {
-                    "subject": "detected subject",
-                    "topic": "detected topics",
-                    "difficulty": "detected difficulty",
-                    "board": "${config.curriculum}"
-                  },
-                  "questions": [
-                    {
-                      "id": number,
-                      "type": "objective",
-                      "question": "string",
-                      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-                      "correct_answer": "One of the options exactly",
-                      "explanation": "Brief explanation"
-                    }
-                  ]
-                }
-            `;
-
-            const payload = formatGroqPayload(prompt, "You are an expert exam paper generator. Analyze sample papers and create similar questions.");
-            const result = await retryableFetch(GROQ_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            const text = result.choices?.[0]?.message?.content;
-            if (!text) throw new Error("No response from AI");
-
-            try {
-                const parsedQuiz = RagService.extractJson(text);
-                setQuizData(parsedQuiz);
-                setStep('taking');
-                incrementUsage('quiz');
-            } catch (e) {
-                console.error("Quiz Parse Error:", e, "Raw Text:", text);
-                throw new Error("AI returned an invalid quiz format. Please try again.");
-            }
-        } catch (err) {
-            setError(err.message || "Failed to generate similar paper.");
-        } finally { setIsLoading(false); }
-    };
-
-    // Submit Quiz for Grading (AI Learning Mentor)
     const submitQuiz = async () => {
         setIsLoading(true);
-        setStep('grading');
-
         try {
-            const selectedDoc = documents.find(d => d.id === config.docId);
-
-            // Analyze performance for the prompt
-            const wrongAnswers = [];
-            const missedTopics = [];
+            // Calculate Score
             let correctCount = 0;
-
-            quizData.questions.forEach(q => {
-                const studentAnswer = answers[q.id];
+            let objectiveTotal = 0;
+            const detailedAnswers = quizData.questions.map(q => {
+                const studentAns = answers[q.id] || "Not Attempted";
+                const isCorrect = q.type === 'objective' && studentAns === q.correct_answer;
                 if (q.type === 'objective') {
-                    if (studentAnswer === q.correct_answer) {
-                        correctCount++;
-                    } else {
-                        wrongAnswers.push({
-                            question: q.question,
-                            student_answer: studentAnswer,
-                            correct_answer: q.correct_answer
-                        });
-                        missedTopics.push(q.explanation || "Related Concept");
-                    }
-                } else {
-                    wrongAnswers.push({ question: q.question, student_answer: studentAnswer, type: 'subjective' });
+                    objectiveTotal++;
+                    if (isCorrect) correctCount++;
                 }
+                return { ...q, student_answer: studentAns, is_correct: isCorrect };
             });
 
-            const scorePercentage = Math.round((correctCount / quizData.questions.length) * 100);
+            const objectiveScore = objectiveTotal > 0 ? Math.round((correctCount / objectiveTotal) * 100) : 0;
 
-            setAssessmentStats({
-                score: scorePercentage,
-                correct: correctCount,
-                total: quizData.questions.length,
-                wrongAnswers
-            });
+            // AI Analysis
+            const analysisPrompt = `
+                Analyze Student Performance(Class ${config.classGrade} - ${config.subject}).
+    Topic: ${config.topic}
 
-            const prompt = `
-                Perform an elite level pedagogical assessment for a ${config.curriculum} student.
-                Subject: ${config.subject}
-                Specific Topic: ${config.topic}
-                Student Score: ${scorePercentage}%
-                Questions: ${quizData.questions.length}
-                
-                Incorrect/Subjective Data:
-                ${JSON.stringify(wrongAnswers.map(w => ({ q: w.question, student_val: w.student_answer, correct_val: w.correct_answer, type: w.type })))}
-                
-                Instructions:
-                1. Critically analyze the PATTERN of mistakes (Conceptual vs Factual vs Application).
-                2. For Subjective answers, provide a brief grade (Correct/Partial/Incorrect).
-                3. Evaluate the student's overall mastery level.
-                4. Identify 2-3 specific "Target Topics" the student should re-study.
-                5. Provide a "YouTube Search Link" for each target topic (Format: [Text](https://www.youtube.com/results?search_query=...)).
-                6. Create a "Personalized Remedial Action Plan" (Markdown).
-                7. Provide a "Mentor's Final Verdict".
-            `;
+DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, ans: a.student_answer, correct: a.correct_answer })))}
 
-            const payload = formatGroqPayload(prompt, "You are an AI Learning Mentor. Provide a detailed remedial plan. Use clear headers: ## Summary of Performance, ## Conceptual Gaps, ## Personalized Action Plan, ## Mentor's Verdict. Use ✨ for summaries and 💡 for insights. Keep it clean and tidy.");
+                OUTPUT JSON:
+{
+    "overall_feedback": "Constructive feedback string",
+        "weak_concepts": [
+            { "concept": "Topic Name", "revision_note": "Short revision note", "youtube_query": "Search query" }
+        ]
+}
+`;
+
+            const payload = formatGroqPayload(analysisPrompt, "You are an expert tutor.");
             const result = await retryableFetch(GROQ_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
-            const mentorResponse = result.choices?.[0]?.message?.content || "Could not analyze performance.";
-            setGradingResult(mentorResponse);
+            const analysisJson = RagService.extractJson(result.choices?.[0]?.message?.content || "{}");
+
+            setAssessmentStats({
+                score: objectiveScore,
+                correct: correctCount,
+                total: objectiveTotal,
+                detailedAnswers,
+                analysis: analysisJson
+            });
+            setGradingResult("Analyzed");
             setStep('result');
         } catch (err) {
-            setError("Analysis failed: " + err.message);
-            setStep('setup');
+            setError(err.message);
+            setStep('result'); // Allow viewing key even if AI fails
         } finally { setIsLoading(false); }
+    };
+
+    const handleRetake = () => { /* ... existing retake logic ... */ };
+
+    // Helper to group questions by section for display
+    const groupQuestionsBySection = (questions) => {
+        const groups = {};
+        questions.forEach(q => {
+            const sec = q.section || "General";
+            if (!groups[sec]) groups[sec] = [];
+            groups[sec].push(q);
+        });
+        return groups;
     };
 
     return (
         <div className={`flex flex-col h-full ${isDark ? 'bg-gray-900' : 'bg-warm-100'} text-theme-primary relative overflow-y-auto custom-scrollbar p-4 md:p-8 transition-colors duration-300 section-quiz`}>
-            {/* Decorative gradient - Purple/Rose themed */}
             <div className={`absolute top-0 right-0 w-[600px] h-[600px] ${isDark ? 'bg-purple-900/10' : 'bg-purple-400/10'} rounded-full blur-[100px] -z-10 pointer-events-none`} />
             <div className={`absolute bottom-0 left-0 w-[400px] h-[400px] ${isDark ? 'bg-rose-900/10' : 'bg-rose-400/10'} rounded-full blur-[100px] -z-10 pointer-events-none`} />
 
-            {step === 'setup' && (
-                <div className="max-w-4xl mx-auto w-full animate-slide-up">
-                    <div className="glass-panel p-8 rounded-3xl shadow-2xl relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-500 to-rose-500" />
+            {/* View Mode Toggle / Header logic if needed could go here, but we put it inside setup for now */}
 
-                        <div className="flex items-center gap-4 mb-8">
-                            <div className={`p-3 ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'} rounded-2xl`}>
-                                <FileText className="w-8 h-8 text-purple-500" />
+            {viewMode === 'paper-gen' && (
+                <div className="h-full flex flex-col">
+                    <button
+                        onClick={() => setViewMode('quiz')}
+                        className="mb-4 self-start flex items-center gap-2 text-sm font-bold text-theme-muted hover:text-theme-primary transition-colors"
+                    >
+                        <ChevronRight className="w-4 h-4 rotate-180" /> Back to Quiz Setup
+                    </button>
+                    <SamplePaperGenerator retryableFetch={retryableFetch} />
+                </div>
+            )}
+
+            {viewMode === 'quiz' && step === 'setup' && (
+                <div className="flex-1 flex flex-col h-full animate-slide-up">
+                    {/* Hero Header */}
+                    <div className="text-center py-6 space-y-3">
+                        <div className="flex items-center justify-center gap-3">
+                            <div className="p-3 bg-gradient-to-br from-purple-500 to-rose-500 rounded-2xl shadow-lg">
+                                <Brain className="w-8 h-8 text-white" />
                             </div>
-                            <div>
-                                <h2 className="text-3xl font-bold text-theme-primary">Quiz & Assessment</h2>
-                                <p className="text-theme-muted text-sm">Generate quizzes or create similar test papers {!isPro && `(${getRemainingUses('quiz')} left today)`}</p>
-                            </div>
+                            <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-purple-500 via-rose-500 to-orange-400 bg-clip-text text-transparent">
+                                Quiz Generator
+                            </h1>
                         </div>
-
-                        {/* Mode Selector */}
-                        <div className="mb-8 space-y-3">
-                            <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">Select Mode</label>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <button
-                                    type="button"
-                                    onClick={() => setMode('standard')}
-                                    className={`p-4 rounded-xl border-2 transition-all ${mode === 'standard'
-                                        ? 'border-purple-500 bg-purple-500/10'
-                                        : `border-transparent ${isDark ? 'bg-white/5' : 'bg-warm-200'}`
-                                        }`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <BookOpen className="w-6 h-6 text-purple-500" />
-                                        <div className="text-left">
-                                            <div className="font-bold text-theme-primary">Standard Quiz</div>
-                                            <div className="text-xs text-theme-muted">Topic-based assessment</div>
-                                        </div>
-                                    </div>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (!isPro) {
-                                            triggerUpgradeModal('similar-paper');
-                                            return;
-                                        }
-                                        setMode('similar-paper');
-                                    }}
-                                    className={`p-4 rounded-xl border-2 transition-all relative ${mode === 'similar-paper'
-                                        ? 'border-amber-500 bg-amber-500/10'
-                                        : `border-transparent ${isDark ? 'bg-white/5' : 'bg-warm-200'}`
-                                        } ${!isPro && 'opacity-75'}`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <Upload className="w-6 h-6 text-amber-500" />
-                                        <div className="text-left flex-1">
-                                            <div className="font-bold text-theme-primary flex items-center gap-2">
-                                                Similar Paper
-                                                <Crown className="w-4 h-4 text-amber-500" />
-                                            </div>
-                                            <div className="text-xs text-theme-muted">Upload & generate similar</div>
-                                        </div>
-                                        {!isPro && (
-                                            <div className="absolute top-2 right-2 px-2 py-0.5 bg-amber-500 text-white text-[10px] font-bold rounded">
-                                                PRO
-                                            </div>
-                                        )}
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Similar Paper Upload UI */}
-                        {mode === 'similar-paper' ? (
-                            <form onSubmit={generateSimilarPaper} className="space-y-6">
-                                <div className="space-y-4">
-                                    <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">
-                                        Upload Sample Paper
-                                    </label>
-
-                                    <div
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className={`p-8 border-2 border-dashed rounded-2xl cursor-pointer transition-all ${samplePaper
-                                            ? 'border-amber-500 bg-amber-500/10'
-                                            : `border-gray-400 ${isDark ? 'bg-white/5 hover:bg-white/10' : 'bg-warm-200 hover:bg-warm-300'}`
-                                            }`}
-                                    >
-                                        <input
-                                            ref={fileInputRef}
-                                            type="file"
-                                            accept=".pdf,image/*"
-                                            onChange={handleFileUpload}
-                                            className="hidden"
-                                        />
-
-                                        <div className="flex flex-col items-center gap-4">
-                                            {samplePaper ? (
-                                                <>
-                                                    <FileText className="w-12 h-12 text-amber-500" />
-                                                    <div className="text-center">
-                                                        <p className="font-bold text-theme-primary">{samplePaper.name}</p>
-                                                        <p className="text-xs text-theme-muted">
-                                                            {(samplePaper.size / 1024).toFixed(1)} KB • Click to change
-                                                        </p>
-                                                    </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Upload className="w-12 h-12 text-gray-400" />
-                                                    <div className="text-center">
-                                                        <p className="font-bold text-theme-primary">Drop your sample paper here</p>
-                                                        <p className="text-xs text-theme-muted">Or click to browse • PDF or Image</p>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {samplePaperText && (
-                                        <div className={`p-4 rounded-xl ${isDark ? 'bg-white/5' : 'bg-warm-200'} max-h-40 overflow-y-auto`}>
-                                            <p className="text-xs text-theme-muted font-mono">{samplePaperText.substring(0, 500)}...</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-4">
-                                        <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">
-                                            Number of Questions
-                                        </label>
-                                        <select
-                                            name="count"
-                                            value={config.count}
-                                            onChange={handleConfigChange}
-                                            className={`w-full p-4 rounded-xl glass-input focus:outline-none appearance-none cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-warm-200'}`}
-                                        >
-                                            {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n} Questions</option>)}
-                                        </select>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">
-                                            Question Pattern
-                                        </label>
-                                        <div className="flex gap-2">
-                                            {['Objective', 'Subjective', 'Mixed'].map(p => (
-                                                <button
-                                                    key={p}
-                                                    type="button"
-                                                    onClick={() => setSimilarPattern(p)}
-                                                    className={`flex-1 p-3.5 rounded-xl border transition-all text-xs font-bold ${similarPattern === p
-                                                        ? 'bg-amber-600 border-amber-400 text-white'
-                                                        : `border-transparent ${isDark ? 'bg-white/5' : 'bg-warm-200'} text-theme-muted`
-                                                        }`}
-                                                >
-                                                    {p}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {error && (
-                                    <div className="flex items-center gap-3 p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl">
-                                        <AlertCircle className="w-5 h-5 text-rose-500" />
-                                        <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
-                                    </div>
-                                )}
-
-                                <button
-                                    type="submit"
-                                    disabled={isLoading || !samplePaper}
-                                    className="w-full p-4 rounded-xl font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="w-5 h-5 animate-spin" />
-                                            Analyzing & Generating...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Sparkles className="w-5 h-5" />
-                                            Generate Similar Paper
-                                        </>
-                                    )}
-                                </button>
-                            </form>
-                        ) : (
-                            // Standard Quiz Form
-                            <form onSubmit={generateQuiz} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-4">
-                                        <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">1. Curriculum Board</label>
-                                        <div className="flex gap-2">
-                                            {['CBSE', 'ICSE'].map(b => (
-                                                <button key={b} type="button" onClick={() => setConfig({ ...config, curriculum: b })} className={`flex-1 p-3.5 rounded-xl border transition-all text-xs font-bold ${config.curriculum === b ? 'bg-purple-600 border-purple-400 text-white' : `border-transparent ${isDark ? 'bg-white/5' : 'bg-warm-200'} text-theme-muted`}`}>{b}</button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">2. Difficulty</label>
-                                        <div className="flex gap-2">
-                                            {['Easy', 'Medium', 'Hard'].map(d => (
-                                                <button key={d} type="button" onClick={() => setConfig({ ...config, difficulty: d })} className={`flex-1 p-3.5 rounded-xl border transition-all text-xs font-bold ${config.difficulty === d ? 'bg-purple-600 border-purple-400 text-white' : `border-transparent ${isDark ? 'bg-white/5' : 'bg-warm-200'} text-theme-muted`}`}>{d}</button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-4">
-                                        <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">3. Subject</label>
-                                        <input name="subject" value={config.subject} onChange={handleConfigChange} required placeholder="e.g. Physics, Chemistry, Biology..." className="w-full p-4 rounded-xl glass-input focus:outline-none" />
-                                    </div>
-                                    <div className="space-y-4">
-                                        <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">4. Chapter or Topic</label>
-                                        <input name="topic" value={config.topic} onChange={handleConfigChange} required placeholder="e.g. Life Processes, Light, Carbon..." className="w-full p-4 rounded-xl glass-input focus:outline-none" />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-4">
-                                        <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">5. Assessment Length</label>
-                                        <select name="count" value={config.count} onChange={handleConfigChange} className={`w-full p-4 rounded-xl glass-input focus:outline-none appearance-none cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-warm-200'}`}>
-                                            {[5, 10, 15, 20].map(n => <option key={n} value={n} className={isDark ? 'bg-gray-800' : 'bg-warm-100'}>{n} Questions</option>)}
-                                        </select>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <label className="text-sm font-bold text-theme-muted uppercase tracking-wider block">6. Question Style</label>
-                                        <select name="type" value={config.type} onChange={handleConfigChange} className={`w-full p-4 rounded-xl glass-input focus:outline-none appearance-none cursor-pointer ${isDark ? 'bg-gray-800' : 'bg-warm-200'}`}>
-                                            <option value="Objective" className={isDark ? 'bg-gray-800' : 'bg-warm-100'}>MCQs Only</option>
-                                            <option value="Subjective" className={isDark ? 'bg-gray-800' : 'bg-warm-100'}>Short/Long Answers</option>
-                                            <option value="Both" className={isDark ? 'bg-gray-800' : 'bg-warm-100'}>Mixed Pattern</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className={`p-4 rounded-2xl ${isDark ? 'bg-purple-500/5 border-purple-500/10' : 'bg-purple-100 border-purple-200'} border flex items-center justify-between`}>
-                                    <div className="flex items-center gap-3">
-                                        <Sparkles className="w-5 h-5 text-purple-500" />
-                                        <span className="text-xs font-medium text-theme-muted">Context Source:</span>
-                                    </div>
-                                    <select name="docId" value={config.docId} onChange={handleConfigChange} className="bg-transparent text-purple-500 text-xs font-bold focus:outline-none cursor-pointer">
-                                        {documents.map(doc => <option key={doc.id} value={doc.id} className={isDark ? 'bg-gray-800' : 'bg-warm-100'}>{doc.name}</option>)}
-                                    </select>
-                                </div>
-
-                                <button type="submit" disabled={isLoading} className="w-full py-4 bg-gradient-to-r from-purple-600 to-rose-600 text-white rounded-xl font-bold text-lg shadow-lg hover:shadow-purple-500/30 transition-all transform hover:scale-[1.01] flex justify-center items-center">
-                                    {isLoading ? <><Loader2 className="animate-spin mr-2" /> Preparing Exam Paper...</> : 'Generate Assessment'}
-                                </button>
-                                {error && <div className={`text-rose-500 text-sm text-center font-medium ${isDark ? 'bg-rose-400/10 border-rose-400/20' : 'bg-rose-100 border-rose-200'} p-3 rounded-lg border`}>{error}</div>}
-                            </form>
-                        )}
+                        <p className="text-theme-muted text-lg max-w-xl mx-auto">
+                            AI-powered assessments tailored to your syllabus
+                            {!isPro && <span className="text-purple-500 ml-2">({getRemainingUses('quiz')} free left)</span>}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setViewMode('paper-gen')}
+                            className="mt-2 inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 text-white font-bold rounded-full shadow-xl hover:shadow-purple-500/40 transition-all hover:scale-105"
+                        >
+                            <Sparkles className="w-5 h-5" />
+                            ✨ Upload Sample Paper & Generate New
+                        </button>
                     </div>
+
+                    {/* Main Form */}
+                    <form onSubmit={generateQuiz} className="flex-1 flex flex-col gap-5 px-4 md:px-8 pb-6 max-w-6xl mx-auto w-full overflow-y-auto">
+
+                        {/* Row 1: Board & Class */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                            <div className={`p-5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg border ${isDark ? 'border-white/10' : 'border-gray-100'}`}>
+                                <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                                    <BookOpen className="w-4 h-4 text-purple-500" /> Board
+                                </h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {['CBSE', 'ICSE'].map(b => (
+                                        <button key={b} type="button" onClick={() => setConfig({ ...config, curriculum: b })}
+                                            className={`p-4 rounded-xl font-bold text-lg transition-all ${config.curriculum === b
+                                                ? 'bg-gradient-to-r from-purple-600 to-rose-500 text-white shadow-lg'
+                                                : `${isDark ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-100 hover:bg-gray-200'} text-theme-secondary`}`}>
+                                            {b}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className={`p-5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg border ${isDark ? 'border-white/10' : 'border-gray-100'}`}>
+                                <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-3 flex items-center gap-2">
+                                    <Trophy className="w-4 h-4 text-purple-500" /> Class
+                                </h3>
+                                <div className="grid grid-cols-4 gap-3">
+                                    {['9', '10', '11', '12'].map(c => (
+                                        <button key={c} type="button" onClick={() => setConfig({ ...config, classGrade: c })}
+                                            className={`p-4 rounded-xl font-bold text-lg transition-all ${config.classGrade === c
+                                                ? 'bg-gradient-to-r from-purple-600 to-rose-500 text-white shadow-lg'
+                                                : `${isDark ? 'bg-white/5 hover:bg-white/10' : 'bg-gray-100 hover:bg-gray-200'} text-theme-secondary`}`}>
+                                            {c}<sup className="text-xs">th</sup>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Row 2: Subject & Topic */}
+                        <div className={`p-5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg border ${isDark ? 'border-white/10' : 'border-gray-100'}`}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div>
+                                    <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-2">📚 Subject</h3>
+                                    <input name="subject" value={config.subject} onChange={handleConfigChange} required
+                                        placeholder="Physics, Chemistry, Maths, Biology, English..."
+                                        className={`w-full p-4 rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 ${isDark ? 'bg-white/5 placeholder-gray-500' : 'bg-gray-50 placeholder-gray-400'} text-theme-primary`} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-2">📖 Chapter / Topic</h3>
+                                    <input name="topic" value={config.topic} onChange={handleConfigChange} required
+                                        placeholder="Electrostatics, Quadratic Equations, Photosynthesis..."
+                                        className={`w-full p-4 rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 ${isDark ? 'bg-white/5 placeholder-gray-500' : 'bg-gray-50 placeholder-gray-400'} text-theme-primary`} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Row 3: Quiz Settings */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                            {/* Questions */}
+                            <div className={`p-5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg border ${isDark ? 'border-white/10' : 'border-gray-100'}`}>
+                                <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-3">🔢 Questions</h3>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[5, 10, 15, 20, 35].map(n => (
+                                        <button key={n} type="button"
+                                            onClick={() => { let c = { ...config, count: n }; if (n === 35) c.type = 'Mixed'; setConfig(c); }}
+                                            className={`p-3 rounded-lg font-bold transition-all ${config.count === n
+                                                ? 'bg-gradient-to-r from-purple-600 to-rose-500 text-white shadow-md'
+                                                : `${isDark ? 'bg-white/5' : 'bg-gray-100'} text-theme-secondary hover:opacity-80`} ${n === 35 ? 'col-span-3 text-sm' : ''}`}>
+                                            {n === 35 ? '📄 35 - Full Board Exam' : n}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            {/* Difficulty */}
+                            <div className={`p-5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg border ${isDark ? 'border-white/10' : 'border-gray-100'}`}>
+                                <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-3">🎯 Difficulty</h3>
+                                <div className="space-y-2">
+                                    {[{ v: 'Easy', l: '🟢 Easy', d: 'Basics & Theory' }, { v: 'Medium', l: '🟡 Medium', d: '50/50 Mix' }, { v: 'Hard', l: '🔴 Hard', d: 'HOTS & Application' }].map(d => (
+                                        <button key={d.v} type="button" onClick={() => setConfig({ ...config, difficulty: d.v })}
+                                            className={`w-full p-3 rounded-lg text-left flex justify-between items-center transition-all ${config.difficulty === d.v
+                                                ? 'bg-gradient-to-r from-purple-600 to-rose-500 text-white shadow-md'
+                                                : `${isDark ? 'bg-white/5' : 'bg-gray-100'} text-theme-secondary`}`}>
+                                            <span className="font-bold">{d.l}</span>
+                                            <span className={`text-xs ${config.difficulty === d.v ? 'text-white/80' : 'text-theme-muted'}`}>{d.d}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            {/* Type */}
+                            <div className={`p-5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg border ${isDark ? 'border-white/10' : 'border-gray-100'}`}>
+                                <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-3">📝 Type</h3>
+                                <div className="space-y-2">
+                                    {[{ v: 'Objective', l: '✅ MCQs Only' }, { v: 'Subjective', l: '📝 Theory Only' }, { v: 'Mixed', l: '📋 Mixed Pattern' }].map(t => (
+                                        <button key={t.v} type="button" onClick={() => setConfig({ ...config, type: t.v })}
+                                            className={`w-full p-3 rounded-lg font-bold transition-all ${config.type === t.v
+                                                ? 'bg-gradient-to-r from-purple-600 to-rose-500 text-white shadow-md'
+                                                : `${isDark ? 'bg-white/5' : 'bg-gray-100'} text-theme-secondary`}`}>
+                                            {t.l}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Submit */}
+                        <button type="submit" disabled={isLoading || !config.subject || !config.topic}
+                            className="w-full py-5 bg-gradient-to-r from-purple-600 via-rose-500 to-orange-400 text-white rounded-2xl font-black text-xl shadow-2xl hover:shadow-purple-500/40 transition-all transform hover:scale-[1.01] disabled:opacity-50 flex justify-center items-center gap-3">
+                            {isLoading ? <><Loader2 className="w-6 h-6 animate-spin" /> Crafting Your Assessment...</> : <><Brain className="w-6 h-6" /> Generate Assessment 🚀</>}
+                        </button>
+                        {error && <div className="text-rose-500 text-center p-4 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center justify-center gap-3"><AlertCircle className="w-5 h-5" />{error}</div>}
+                    </form>
                 </div>
             )}
 
             {step === 'taking' && quizData && (
                 <div className="max-w-4xl mx-auto w-full animate-slide-up space-y-8 pb-20">
-                    <div className="glass-panel-lighter p-6 rounded-2xl flex justify-between items-center sticky top-0 z-30 backdrop-blur-xl shadow-xl">
+                    <div className="glass-panel-lighter p-6 rounded-2xl flex justify-between items-center sticky top-0 z-30 backdrop-blur-xl shadow-xl border-b border-white/10">
                         <div>
-                            <h3 className="text-xl font-bold text-theme-primary">Assessment Board</h3>
-                            <span className="text-purple-500 text-xs font-bold uppercase tracking-widest">{config.difficulty} Level Pattern</span>
+                            <h3 className="text-xl font-bold text-theme-primary">{config.subject} Assessment</h3>
+                            <div className="flex items-center gap-2 text-xs font-bold text-theme-muted uppercase tracking-wider">
+                                <span className="text-purple-500">Class {config.classGrade}</span>
+                                <span>•</span>
+                                <span>{config.difficulty}</span>
+                            </div>
                         </div>
-                        <button onClick={submitQuiz} className="px-8 py-3 bg-gradient-to-r from-emerald-500 to-green-600 rounded-xl font-bold shadow-lg hover:shadow-green-500/20 transition-all border border-emerald-400/30 text-white">
-                            Submit for Review
+                        <button onClick={submitQuiz} className="px-6 py-2 bg-gradient-to-r from-emerald-500 to-green-600 rounded-lg font-bold shadow-lg hover:shadow-green-500/20 transition-all text-white text-sm">
+                            Submit Exam
                         </button>
                     </div>
 
-                    <div className="space-y-6">
-                        {quizData.questions.map((q, i) => (
-                            <div key={q.id} className="glass-panel p-8 rounded-3xl shadow-lg group hover:border-purple-500/30 transition-all" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: 'var(--border-color)' }}>
-                                <div className="flex gap-6">
-                                    <div className={`flex-shrink-0 w-10 h-10 rounded-xl ${isDark ? 'bg-purple-500/10 border-purple-500/20' : 'bg-purple-100 border-purple-200'} text-purple-500 flex items-center justify-center font-bold border`}>
-                                        {i + 1}
+                    <div className="space-y-8">
+                        {Object.entries(groupQuestionsBySection(quizData.questions)).sort().map(([sectionName, questions]) => (
+                            <div key={sectionName} className="space-y-4">
+                                {(config.type === 'Mixed' || parseInt(config.count) === 35) && (
+                                    <div className="flex items-center gap-4 px-2">
+                                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
+                                        <h4 className="text-lg font-bold text-purple-500 uppercase tracking-widest">{sectionName}</h4>
+                                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="text-xl font-medium text-theme-secondary mb-6 leading-relaxed">{q.question}</p>
+                                )}
 
-                                        {q.type === 'objective' ? (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                {q.options.map((opt, idx) => (
-                                                    <label key={idx} className={`flex items-center p-5 rounded-2xl border transition-all cursor-pointer ${answers[q.id] === opt ? `${isDark ? 'bg-purple-600/20 border-purple-500' : 'bg-purple-100 border-purple-400'} shadow-inner` : `${isDark ? 'border-white/5 bg-white/5 hover:bg-white/10' : 'border-warm-300 bg-warm-200/50 hover:bg-warm-300'}`}`}>
-                                                        <input type="radio" name={`q-${q.id}`} value={opt} checked={answers[q.id] === opt} onChange={() => setAnswers({ ...answers, [q.id]: opt })} className="hidden" />
-                                                        <div className={`w-6 h-6 rounded-full border-2 mr-4 flex items-center justify-center transition-all ${answers[q.id] === opt ? 'border-purple-500 bg-purple-500' : `${isDark ? 'border-slate-600' : 'border-warm-400'}`}`}>
-                                                            {answers[q.id] === opt && <div className="w-2 h-2 rounded-full bg-white shadow-sm" />}
-                                                        </div>
-                                                        <span className="text-theme-secondary font-medium">{opt}</span>
-                                                    </label>
-                                                ))}
+                                {questions.map((q, i) => (
+                                    <div key={q.id} className="glass-panel p-8 rounded-3xl shadow-sm hover:shadow-md transition-all border border-transparent hover:border-purple-500/20">
+                                        <div className="flex gap-5">
+                                            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-theme-bg-secondary text-theme-muted flex items-center justify-center font-bold text-sm">
+                                                {q.id}
                                             </div>
-                                        ) : (
-                                            <textarea
-                                                rows="4"
-                                                className="w-full glass-input p-6 rounded-2xl focus:outline-none text-lg"
-                                                placeholder="Write your comprehensive response..."
-                                                value={answers[q.id] || ''}
-                                                onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                                            />
-                                        )}
+                                            <div className="flex-1 space-y-4">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <p className="text-lg font-medium text-theme-primary leading-relaxed">{q.question}</p>
+                                                        {q.image_description && (
+                                                            <div className={`mt-4 p-5 rounded-2xl ${isDark ? 'bg-gradient-to-br from-indigo-900/30 to-purple-900/20 border-indigo-500/30' : 'bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200'} border-2 border-dashed`}>
+                                                                <div className="flex items-center gap-3 mb-3">
+                                                                    <div className="p-2 rounded-xl bg-indigo-500/20">
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-indigo-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" /></svg>
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-bold text-indigo-500 text-sm uppercase tracking-wide">📐 Diagram Required</span>
+                                                                        <p className="text-xs text-theme-muted">Visualize this for the question</p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className={`p-4 rounded-xl ${isDark ? 'bg-black/30' : 'bg-white/80'} text-theme-secondary leading-relaxed`}>
+                                                                    {q.image_description}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-xs font-bold text-theme-muted px-2 py-1 rounded bg-theme-bg-secondary flex-shrink-0 ml-2">{q.marks} Marks</span>
+                                                </div>
+
+                                                {q.type === 'objective' ? (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {q.options.map((opt, idx) => (
+                                                            <label key={idx} className={`flex items-center p-4 rounded-xl border cursor-pointer transition-all ${answers[q.id] === opt ? 'bg-purple-600/20 border-purple-500 shadow-md' : 'bg-theme-bg-secondary border-transparent hover:bg-theme-bg-secondary/80'}`}>
+                                                                <input type="radio" name={`q-${q.id}`} value={opt} checked={answers[q.id] === opt} onChange={() => setAnswers({ ...answers, [q.id]: opt })} className="hidden" />
+                                                                <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center flex-shrink-0 ${answers[q.id] === opt ? 'border-purple-500 bg-purple-500' : 'border-gray-400'}`}>
+                                                                    {answers[q.id] === opt && <div className="w-2 h-2 rounded-full bg-white" />}
+                                                                </div>
+                                                                <span className={`${answers[q.id] === opt ? 'text-purple-400 font-semibold' : 'text-theme-secondary'}`}>{opt}</span>
+                                                            </label>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <textarea
+                                                        rows="3"
+                                                        className="w-full glass-input p-4 rounded-xl focus:outline-none text-base resize-none"
+                                                        placeholder="Type your answer here..."
+                                                        value={answers[q.id] || ''}
+                                                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
+                                ))}
                             </div>
                         ))}
                     </div>
                 </div>
             )}
 
-            {(step === 'grading' || step === 'result') && (
-                <div className="max-w-4xl mx-auto w-full animate-slide-up space-y-6 pb-20">
-                    {isLoading && (
-                        <div className="glass-panel p-20 rounded-3xl text-center shadow-2xl">
-                            <div className="relative inline-block mb-8">
-                                <div className="absolute inset-0 bg-purple-500 blur-2xl opacity-20 animate-pulse" />
-                                <Brain className="w-16 h-16 text-purple-500 mx-auto relative animate-float" />
+            {(step === 'grading' || step === 'result') && assessmentStats && (
+                <div className="max-w-4xl mx-auto w-full animate-slide-up space-y-8 pb-20">
+                    {/* ... Result View (Kept mostly same, just ensuring variables match) ... */}
+                    <div className="space-y-8 pb-10">
+                        {/* Score Dashboard */}
+                        <div className={`glass-panel p-8 rounded-[32px] relative overflow-hidden ${isDark ? 'bg-gradient-to-br from-indigo-900/30 to-purple-900/20' : 'bg-gradient-to-br from-indigo-50 to-purple-50'}`}>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                                {/* Main Score */}
+                                <div className="md:col-span-1 flex flex-col items-center justify-center">
+                                    <div className={`w-32 h-32 rounded-full flex items-center justify-center text-5xl font-black bg-gradient-to-br ${assessmentStats.score >= 75 ? 'from-emerald-500 to-green-600' : assessmentStats.score >= 50 ? 'from-yellow-500 to-orange-500' : 'from-rose-500 to-red-600'} text-white shadow-2xl`}>
+                                        {assessmentStats.score}%
+                                    </div>
+                                    <p className="text-lg font-bold text-theme-primary mt-3">
+                                        {assessmentStats.score >= 90 ? '🎉 Outstanding!' : assessmentStats.score >= 75 ? '👏 Great Job!' : assessmentStats.score >= 50 ? '💪 Keep Going!' : '📚 Need Practice'}
+                                    </p>
+                                </div>
+
+                                {/* Stats Grid */}
+                                <div className="md:col-span-2 grid grid-cols-2 gap-4">
+                                    <div className={`p-4 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
+                                        <p className="text-3xl font-black text-emerald-500">{assessmentStats.correct}</p>
+                                        <p className="text-xs font-bold text-theme-muted uppercase tracking-wider">Correct</p>
+                                    </div>
+                                    <div className={`p-4 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
+                                        <p className="text-3xl font-black text-rose-500">{assessmentStats.total - assessmentStats.correct}</p>
+                                        <p className="text-xs font-bold text-theme-muted uppercase tracking-wider">Incorrect</p>
+                                    </div>
+                                    <div className={`p-4 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
+                                        <p className="text-3xl font-black text-purple-500">{assessmentStats.total}</p>
+                                        <p className="text-xs font-bold text-theme-muted uppercase tracking-wider">Total MCQs</p>
+                                    </div>
+                                    <div className={`p-4 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
+                                        <p className="text-3xl font-black text-indigo-500">{config.difficulty}</p>
+                                        <p className="text-xs font-bold text-theme-muted uppercase tracking-wider">Difficulty</p>
+                                    </div>
+                                </div>
                             </div>
-                            <h3 className="text-2xl font-bold text-theme-primary mb-2">AI Mentor Analysis</h3>
-                            <p className="text-theme-muted max-w-sm mx-auto">Evaluating conceptual clarity, grading subjective nuances, and preparing your remedial plan.</p>
+
+                            {/* AI Feedback */}
+                            {assessmentStats.analysis?.overall_feedback && (
+                                <div className={`mt-6 p-4 rounded-xl ${isDark ? 'bg-white/5' : 'bg-white/80'} border border-purple-500/20`}>
+                                    <p className="text-theme-secondary text-center">💡 {assessmentStats.analysis.overall_feedback}</p>
+                                </div>
+                            )}
                         </div>
-                    )}
 
-                    {!isLoading && gradingResult && (
-                        <div className="space-y-8 pb-10">
-                            {/* Dashboard Header */}
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <div className={`lg:col-span-2 glass-panel p-8 rounded-[40px] flex items-center justify-between relative overflow-hidden ${isDark ? 'bg-gradient-to-br from-purple-900/40 to-black/40' : 'bg-gradient-to-br from-purple-100 to-rose-50'}`}>
-                                    <div className="relative z-10">
-                                        <h3 className="text-sm font-bold text-purple-500 uppercase tracking-[0.2em] mb-1">Board Scorecard</h3>
-                                        <h2 className="text-5xl font-black text-theme-primary mb-4 italic">EXCELLENCE</h2>
-                                        <div className="flex gap-3">
-                                            <span className={`px-4 py-1.5 rounded-full ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-warm-200'} border text-[10px] font-bold text-theme-secondary uppercase tracking-widest`}>{config.curriculum} PATTERN</span>
-                                            <span className={`px-4 py-1.5 rounded-full ${isDark ? 'bg-purple-500/20 border-purple-500/30' : 'bg-purple-100 border-purple-200'} border text-[10px] font-bold text-purple-500 uppercase tracking-widest`}>{config.subject}</span>
+                        {/* Weak Concepts */}
+                        {assessmentStats.analysis?.weak_concepts?.length > 0 && (
+                            <div className="glass-panel p-8 rounded-[40px]">
+                                <h3 className="text-xl font-bold text-theme-primary mb-6 flex items-center gap-2"><Brain className="w-6 h-6 text-purple-500" /> Smart Remedial Plan</h3>
+                                <div className="grid gap-4">
+                                    {assessmentStats.analysis.weak_concepts.map((c, i) => (
+                                        <div key={i} className="p-5 rounded-2xl bg-theme-bg-secondary border border-theme-border">
+                                            <h4 className="font-bold text-rose-500 mb-2">{c.concept}</h4>
+                                            <p className="text-sm text-theme-secondary mb-3">{c.revision_note}</p>
+                                            <a href={`https://www.youtube.com/results?search_query=${encodeURIComponent(c.youtube_query + " class " + config.classGrade)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-xs font-bold text-white bg-red-600 px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors">
+                                                <Youtube className="w-3 h-3" /> Watch Lesson
+                                            </a >
+                                        </div >
+                                    ))}
+                                </div >
+                            </div >
+                        )}
+
+                        {/* Answer Key */}
+                        <div className="glass-panel p-8 rounded-[40px]">
+                            <h3 className="text-xl font-bold text-theme-primary mb-6">Detailed Solutions</h3>
+                            <div className="space-y-6">
+                                {assessmentStats.detailedAnswers.map((a, i) => (
+                                    <div key={i} className="border-b border-theme-border pb-6 last:border-0">
+                                        <p className="font-medium text-theme-primary mb-3">Q{i + 1}. {a.question}</p>
+                                        <div className="text-sm space-y-2">
+                                            <div className={`p-3 rounded-lg ${a.is_correct ? 'bg-green-500/10 text-green-600' : 'bg-rose-500/10 text-rose-600'}`}>
+                                                <span className="font-bold text-xs uppercase opacity-70 block mb-1">Your Answer</span>
+                                                {a.student_answer}
+                                            </div>
+                                            <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-600">
+                                                <span className="font-bold text-xs uppercase opacity-70 block mb-1">Correct Answer</span>
+                                                {a.correct_answer}
+                                            </div>
+                                            {a.explanation && <p className="text-xs text-theme-muted mt-2 italic">💡 {a.explanation}</p>}
                                         </div>
-                                    </div>
-
-                                    <div className="relative w-32 h-32 flex items-center justify-center">
-                                        <svg className="w-full h-full transform -rotate-90">
-                                            <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="8" fill="transparent" className={isDark ? 'text-white/5' : 'text-warm-200'} />
-                                            <circle cx="64" cy="64" r="56" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={351.8} strokeDashoffset={351.8 - (351.8 * assessmentStats?.score) / 100} className="text-purple-500 transition-all duration-1000 ease-out" strokeLinecap="round" />
-                                        </svg>
-                                        <div className="absolute text-3xl font-black text-theme-primary">{assessmentStats?.score}<span className="text-sm">%</span></div>
-                                    </div>
-                                </div>
-
-                                <div className={`glass-panel p-8 rounded-[40px] ${isDark ? 'bg-gradient-to-b from-purple-900/30 to-black/40' : 'bg-gradient-to-b from-purple-50 to-rose-50'} flex flex-col justify-center items-center text-center`}>
-                                    <Trophy className={`w-12 h-12 mb-4 ${assessmentStats?.score > 80 ? 'text-amber-400' : 'text-theme-muted opacity-50'}`} />
-                                    <h4 className="text-xs font-bold text-theme-muted uppercase tracking-[0.2em] mb-1">Rank Status</h4>
-                                    <div className="text-2xl font-bold text-theme-primary uppercase italic">
-                                        {assessmentStats?.score > 90 ? 'Merit' : assessmentStats?.score > 70 ? 'Qualified' : 'Requires Aim'}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Detailed Stats */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {[
-                                    { label: 'Total', val: assessmentStats?.total, color: 'text-sky-500' },
-                                    { label: 'Correct', val: assessmentStats?.correct, color: 'text-emerald-500' },
-                                    { label: 'Accuracy', val: assessmentStats?.score + '%', color: 'text-purple-500' },
-                                    { label: 'Mistakes', val: assessmentStats?.wrongAnswers.length, color: 'text-rose-500' }
-                                ].map((stat, i) => (
-                                    <div key={i} className={`glass-panel p-5 rounded-3xl ${isDark ? 'bg-white/5' : 'bg-warm-200/50'} text-center`}>
-                                        <div className="text-xs font-bold text-theme-muted uppercase tracking-widest mb-1">{stat.label}</div>
-                                        <div className={`text-2xl font-black ${stat.color}`}>{stat.val}</div>
                                     </div>
                                 ))}
                             </div>
-
-                            {/* Knowledge Resources Section */}
-                            <div className={`glass-panel p-8 rounded-[40px] ${isDark ? 'bg-purple-500/5' : 'bg-purple-50'}`}>
-                                <div className="flex items-center gap-3 mb-6">
-                                    <Sparkles className="w-6 h-6 text-purple-500" />
-                                    <h3 className="text-xl font-bold text-theme-primary">Recommended Learning</h3>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-3">
-                                        <h4 className="text-xs font-bold text-theme-muted uppercase tracking-widest pl-1">Weak Concepts to Master</h4>
-                                        <div className="space-y-2">
-                                            {assessmentStats?.wrongAnswers.slice(0, 3).map((w, i) => (
-                                                <div key={i} className={`flex items-center gap-3 p-4 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-warm-200/50'} text-sm font-medium text-theme-secondary`}>
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]" />
-                                                    {w.question.split('?')[0].length > 40 ? w.question.substring(0, 40) + '...' : w.question}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        <h4 className="text-xs font-bold text-theme-muted uppercase tracking-widest pl-1">Study Material (YouTube)</h4>
-                                        <div className="flex flex-wrap gap-2">
-                                            {[`CBSE ${config.subject} ${config.topic} class 10`, `NCERT ${config.topic} explained`, `${config.topic} revision`].map((q, i) => (
-                                                <a
-                                                    key={i}
-                                                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 p-3.5 rounded-2xl ${isDark ? 'bg-red-600/10 border-red-600/20' : 'bg-red-50 border-red-200'} border text-red-500 hover:bg-red-600 hover:text-white transition-all text-xs font-black uppercase tracking-wider`}
-                                                >
-                                                    <Youtube className="w-4 h-4" />
-                                                    Watch Tutorial
-                                                </a>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* AI Mentor Deep Report */}
-                            <div className={`glass-panel p-8 rounded-[40px] relative overflow-hidden ${isDark ? 'bg-slate-900/80' : 'bg-warm-200/70'}`}>
-                                <div className="flex items-center gap-4 mb-8">
-                                    <div className={`p-4 ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'} rounded-2xl text-purple-500`}>
-                                        <Brain className="w-8 h-8" />
-                                    </div>
-                                    <div>
-                                        <h2 className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-purple-500 to-rose-500">Pedagogical Analysis</h2>
-                                        <p className="text-theme-muted text-sm font-bold uppercase tracking-widest">AI Learning Mentor v2.0</p>
-                                    </div>
-                                </div>
-
-                                <div className="prose prose-invert max-w-none prose-p:leading-relaxed prose-headings:text-purple-500 prose-li:text-theme-secondary">
-                                    <div className={`whitespace-pre-wrap font-sans text-lg text-theme-secondary ${isDark ? 'bg-white/5' : 'bg-warm-100'} p-8 rounded-3xl`} style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: 'var(--border-color)' }}>
-                                        <div className="space-y-2">
-                                            {gradingResult.split('\n').map((line, idx) => {
-                                                if (line.startsWith('## ')) {
-                                                    return <h2 key={idx} className={`text-2xl font-bold mt-6 mb-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{line.replace('## ', '')}</h2>;
-                                                }
-                                                if (line.startsWith('### ')) {
-                                                    return <h3 key={idx} className={`text-xl font-bold mt-4 mb-2 ${isDark ? 'text-rose-400' : 'text-rose-500'}`}>{line.replace('### ', '')}</h3>;
-                                                }
-                                                if (line.includes('**')) {
-                                                    const parts = line.split(/\*\*(.+?)\*\*/g);
-                                                    return (
-                                                        <p key={idx} className="my-2 text-[17px]">
-                                                            {parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-bold text-purple-500">{p}</strong> : p)}
-                                                        </p>
-                                                    );
-                                                }
-                                                if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
-                                                    return (
-                                                        <div key={idx} className="flex gap-3 my-1.5 ml-4 text-[17px]">
-                                                            <span className="text-purple-500">•</span>
-                                                            <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
-                                                        </div>
-                                                    );
-                                                }
-                                                if (line.trim()) {
-                                                    return <p key={idx} className="my-2 text-[17px]">{line}</p>;
-                                                }
-                                                return <div key={idx} className="h-2" />;
-                                            })}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-4">
-                                <button onClick={() => setStep('setup')} className="flex-1 py-5 bg-purple-600 text-white rounded-[30px] font-black text-xl hover:bg-purple-700 transition-all shadow-2xl shadow-purple-900/40 flex justify-center items-center gap-3">
-                                    <RefreshCw className="w-6 h-6" /> NEW STUDY CYCLE
-                                </button>
-                                <button onClick={() => window.print()} className={`py-5 px-8 ${isDark ? 'bg-white/5 border-white/10' : 'bg-warm-200 border-warm-300'} border text-theme-primary rounded-[30px] font-bold hover:opacity-80 transition-all`}>
-                                    SAVE REPORT
-                                </button>
-                            </div>
                         </div>
-                    )}
-                </div>
+
+                        <button onClick={() => setStep('setup')} className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold rounded-2xl shadow-lg">Start New Assessment</button>
+                    </div >
+                </div >
             )}
-        </div>
+        </div >
     );
 };
 

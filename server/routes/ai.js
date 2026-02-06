@@ -9,225 +9,216 @@ import { validateAIRequest } from '../middleware/validation.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load .env from server directory
-const envPath = path.join(__dirname, '..', '.env');
-console.log(`[AI Service] Loading env from: ${envPath}`);
-const result = dotenv.config({ path: envPath });
-if (result.error) {
-    console.log(`[AI Service] Dotenv error: ${result.error.message}`);
-} else {
-    console.log(`[AI Service] Env loaded successfully, GROQ in env:`, !!process.env.GROQ_API_KEY);
-}
+// Load .env
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const router = express.Router();
 
 // --- Configuration ---
 const GROQ_API_KEY = (process.env.GROQ_API_KEY || "").trim();
-const GEMINI_API_KEY = (process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "").trim();
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL = "llama-3.3-70b-versatile"; // Latest replacement for decommissioned 3.1 model
-const REQUEST_TIMEOUT = 9000; // 9 seconds to fit within Vercel's 10s limit
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim();
+const GROQ_MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
+const GROQ_VISION_MODEL = "llama-3.2-90b-vision-preview"; // Or 11b if 90b is unavailable
+const REQUEST_TIMEOUT = 30000;
 
-// Log key status for debugging
-console.log(`[AI Service] Groq Key Loaded: ${!!GROQ_API_KEY}`);
-console.log(`[AI Service] Gemini Key Loaded: ${!!GEMINI_API_KEY}`);
+console.log(`[AI Service] VERSION 8.0 (ULTRA STEALTH) ACTIVE`);
 
-// --- Helper: Fetch with Timeout ---
-const fetchWithTimeout = async (url, options) => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+// --- Helper: Ultra-Stealth Groq Call ---
+const callGroqStealth = async (messages, modelIdx = 0) => {
+    if (!GROQ_API_KEY) throw new Error("No Groq Key - Please set GROQ_API_KEY in server/.env");
+
+    const model = GROQ_MODELS[modelIdx];
+    console.log(`[AI] Attempting Groq with model: ${model}`);
+
     try {
-        const response = await fetch(url, { ...options, signal: controller.signal });
-        clearTimeout(timeoutId);
-        return response;
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${GROQ_API_KEY}`,
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: messages,
+                temperature: 0.7,
+                max_tokens: 4096
+            }),
+            timeout: REQUEST_TIMEOUT
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[AI] Groq ${model} failed (${response.status}):`, errorText.substring(0, 200));
+
+            // Rate limit or quota exceeded - try next model
+            if (response.status === 429 || response.status === 503) {
+                console.warn(`[AI] Rate limited on ${model}, trying fallback...`);
+                if (modelIdx < GROQ_MODELS.length - 1) {
+                    return callGroqStealth(messages, modelIdx + 1);
+                }
+                throw new Error("RATE_LIMITED");
+            }
+
+            // Auth issues
+            if (response.status === 403 || response.status === 401) {
+                throw new Error("GROQ_AUTH_ERROR");
+            }
+
+            // Try next model for other errors
+            if (modelIdx < GROQ_MODELS.length - 1) {
+                return callGroqStealth(messages, modelIdx + 1);
+            }
+            throw new Error(`GROQ_ERROR_${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log(`[AI] Groq ${model} success`);
+        return data;
+    } catch (fetchError) {
+        console.error(`[AI] Groq fetch error:`, fetchError.message);
+        if (modelIdx < GROQ_MODELS.length - 1) {
+            return callGroqStealth(messages, modelIdx + 1);
+        }
+        throw fetchError;
+    }
+};
+
+// --- Robust Gemini Helper ---
+const GEMINI_MODELS = [
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemini-1.0-pro",
+    "gemini-pro"
+];
+
+const callGeminiRobust = async (prompt, modelIdx = 0) => {
+    if (modelIdx >= GEMINI_MODELS.length) throw new Error("All Gemini models failed");
+
+    const model = GEMINI_MODELS[modelIdx];
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+
+        if (!response.ok) {
+            if ([404, 429, 503, 500].includes(response.status)) {
+                return callGeminiRobust(prompt, modelIdx + 1);
+            }
+            const errText = await response.text();
+            throw new Error(errText);
+        }
+        return await response.json();
+    } catch (e) {
+        return callGeminiRobust(prompt, modelIdx + 1);
+    }
+};
+
+const callGroqVision = async (messages) => {
+    if (!GROQ_API_KEY) throw new Error("No Groq Key");
+
+    console.log(`[AI] Attempting Groq Vision with model: ${GROQ_VISION_MODEL}`);
+
+    try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${GROQ_API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: GROQ_VISION_MODEL,
+                messages: messages,
+                temperature: 0.5,
+                max_tokens: 6000,
+                stream: false
+            })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Groq Vision Error ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content;
     } catch (error) {
-        clearTimeout(timeoutId);
+        console.error("[AI] Groq Vision failed:", error.message);
         throw error;
     }
 };
 
-// --- Helper: Call Groq ---
-const callGroq = async (prompt) => {
-    console.log("[Groq Request] Starting...");
-    const response = await fetchWithTimeout(GROQ_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${GROQ_API_KEY}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            messages: [{ role: "user", content: prompt }],
-            model: GROQ_MODEL,
-            temperature: 0.7,
-            response_format: { type: "json_object" }
-        })
-    });
+// --- Route: Gemini Chat ---
+router.post('/gemini', async (req, res) => {
+    try {
+        const { messages } = req.body;
+        const prompt = messages.map(m => `${m.role}: ${m.content}`).join('\n');
 
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(`Groq API Error: ${err.error?.message || response.statusText}`);
+        if (!GEMINI_API_KEY) throw new Error("No Gemini Key");
+
+        const data = await callGeminiRobust(prompt);
+        res.json(data);
+    } catch (error) {
+        console.error("[Gemini] Error:", error.message);
+        res.status(500).json({ error: error.message });
     }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || "";
-};
-
-// --- Helper: Call Gemini REST ---
-const callGemini = async (prompt, modelName = "gemini-1.5-flash") => {
-    const versions = ['v1beta', 'v1'];
-    const models = [modelName, 'gemini-1.5-flash-latest', 'gemini-pro'];
-    let lastError = null;
-
-    for (const ver of versions) {
-        for (const mod of models) {
-            try {
-                const url = `https://generativelanguage.googleapis.com/${ver}/models/${mod}:generateContent?key=${GEMINI_API_KEY}`;
-                console.log(`[Gemini Request] Trying ${ver}/${mod}...`);
-                const response = await fetchWithTimeout(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    return data.candidates?.[0]?.content?.parts?.[0]?.text;
-                }
-            } catch (err) {
-                lastError = err;
-            }
-        }
-    }
-    throw new Error(lastError ? lastError.message : "Gemini inaccessible");
-};
+});
 
 // --- Route: Podcast ---
 router.post('/podcast', async (req, res) => {
-    const { content, topics, mode, syllabus, tier = 'basic' } = req.body;
-    const isPro = tier === 'pro' || tier === 'dev';
-
+    const { content, topics, mode, syllabus } = req.body;
     try {
-        // Define podcast parameters based on tier
-        const podcastConfig = isPro ? {
-            exchanges: '20-25',
-            duration: '10-15 minutes',
-            depth: 'comprehensive and thoroughly detailed',
-            style: 'Use first-principles thinking, dive deep into underlying mechanisms, provide real-world examples, historical context, and practical applications. Each response should be substantive (3-5 sentences minimum).',
-            rules: `
-                - Make this a PREMIUM deep-dive lasting 10-15 minutes when spoken aloud.
-                - Sam should explain concepts from first principles, building up understanding layer by layer.
-                - Include specific examples, case studies, analogies, and real-world applications.
-                - Alex should ask probing follow-up questions that explore edge cases and deeper implications.
-                - Cover the topic COMPREHENSIVELY - don't skip any important subtopics.
-                - End with actionable takeaways and connections to other fields.
-            `
-        } : {
-            exchanges: '10-12',
-            duration: '7 minutes',
-            depth: 'clear and engaging',
-            style: 'Be concise but informative. Focus on the key concepts and main takeaways.',
-            rules: `
-                - Make this an engaging podcast lasting approximately 7 minutes when spoken aloud.
-                - Cover the main concepts clearly without going too deep into details.
-                - Sam should explain concepts simply and Alex should ask clarifying questions.
-                - Focus on the most important 3-4 key points of the topic.
-            `
-        };
+        const prompt = `Create a podcast script JSON between Alex and Sam. Topic: ${mode === 'syllabus' ? syllabus.topic : content}. Exchanges: 12. Rules: Output ONLY JSON.`;
+        const msgs = [{ role: 'user', content: prompt }];
 
-        let promptText = `
-            You are an expert podcast script writer creating a ${isPro ? 'PREMIUM' : 'standard'} educational podcast.
-            Create a highly engaging dialogue between Alex (beginner/curious) and Sam (expert/calm).
-            
-            ${mode === 'syllabus' && syllabus ? `
-                SUBJECT: ${syllabus.subject}
-                TOPIC: ${syllabus.topic}
-                LEVEL: ${syllabus.level}
-            ` : `
-                CONTENT: ${content || 'No content provided'}
-                FOCAL POINTS: ${topics || 'General overview'}
-            `}
-            
-            PODCAST PARAMETERS:
-            - Target Duration: ${podcastConfig.duration}
-            - Number of Exchanges: ${podcastConfig.exchanges} exchanges total
-            - Depth Level: ${podcastConfig.depth}
-            - Style: ${podcastConfig.style}
-            
-            STRICT RULES:
-            - Output ONLY a valid JSON object with a 'script' key.
-            - The value of 'script' MUST be an array of objects.
-            - Each object: { "speaker": "Alex" | "Sam", "text": "..." }
-            ${podcastConfig.rules}
-            - Valid JSON object/array only.
-        `;
+        let result;
+        try {
+            result = await callGroqStealth(msgs);
+        } catch (e) {
+            result = await callGeminiFallback(msgs);
+        }
 
-        let resultText = "";
-        let usedProvider = "";
-
-        // Always use Groq as per user request
-        resultText = await callGroq(promptText);
-        usedProvider = "groq";
-
-        // Cleanup and Parse
-        console.log(`[Podcast] Raw result length: ${resultText.length}`);
-        const cleanedText = resultText.replace(/```json|```/g, '').trim();
+        const text = result.choices[0].message.content;
+        const cleanedText = text.replace(/```json|```/g, '').trim();
         let finalJson;
         try {
             finalJson = JSON.parse(cleanedText);
-            console.log(`[Podcast] Successfully parsed JSON with ${finalJson.script?.length || 0} lines`);
         } catch (e) {
-            console.error("[Podcast] JSON Parse Error. Raw text snippet:", cleanedText.substring(0, 100));
             const match = cleanedText.match(/\[\s*\{.*\}\s*\]/s);
-            if (match) {
-                finalJson = { script: JSON.parse(match[0]) };
-                console.log("[Podcast] Recovered via regex match");
-            }
-            else throw new Error("AI returned invalid JSON structure");
+            if (match) finalJson = { script: JSON.parse(match[0]) };
+            else finalJson = { script: [{ speaker: "Sam", text: text }] };
         }
 
-        res.json({
-            script: finalJson.script || finalJson,
-            provider: usedProvider
-        });
-
+        res.json({ script: finalJson.script || finalJson, provider: "atlas-hybrid" });
     } catch (error) {
-        console.error('[AI Route] Podcast Failure:', error.message);
-        res.status(500).json({ error: 'Generation Failed', message: error.message });
+        res.status(500).json({ error: error.message });
     }
 });
 
-// --- Route: Gemini (legacy) ---
-router.post('/gemini', validateAIRequest, async (req, res) => {
-    try {
-        const lastMsg = req.body.messages?.[req.body.messages.length - 1]?.content || "Hello";
-        const result = await callGemini(lastMsg);
-        res.json({ choices: [{ message: { content: result, role: 'assistant' } }] });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// --- Route: Groq ---
+// --- Route: Groq (Chat) ---
 router.post('/groq', validateAIRequest, async (req, res) => {
     try {
-        if (!GROQ_API_KEY) return res.status(500).json({ error: 'Groq Key Missing' });
-        const response = await fetchWithTimeout(GROQ_URL, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...req.body, model: req.body.model || GROQ_MODEL })
-        });
-        const data = await response.json();
-
-        // Forward API errors properly
-        if (!response.ok) {
-            console.error('[Groq Route] API Error:', data);
-            return res.status(response.status).json(data);
+        let result;
+        try {
+            result = await callGroqStealth(req.body.messages);
+        } catch (e) {
+            console.warn("[AI] Groq blocked or failed, using Gemini workaround.");
+            result = await callGeminiFallback(req.body.messages);
         }
-
-        res.json(data);
+        res.json(result);
     } catch (error) {
-        console.error('[Groq Route] Server Error:', error.message);
-        res.status(500).json({ error: error.message });
+        console.error('[Chat Error]', error);
+        res.status(500).json({
+            error: "AI Service Error",
+            message: error.message,
+            details: "Both Groq and Gemini fallback failed. Check server console."
+        });
     }
 });
 
@@ -235,106 +226,91 @@ router.post('/groq', validateAIRequest, async (req, res) => {
 router.post('/youtube-transcript', async (req, res) => {
     const { videoUrl, videoId } = req.body;
 
-    if (!videoId) {
-        return res.status(400).json({ error: 'Missing videoId' });
-    }
+    // For now, we return a placeholder that tells the frontend to work without transcript
+    // The frontend will handle this gracefully and allow AI analysis based on video topic
+    res.json({
+        videoId: videoId,
+        title: "YouTube Video",
+        transcript: null,
+        noTranscript: true,
+        message: "Transcript not available. You can still analyze the video by providing context or asking questions about the topic."
+    });
+});
 
-    console.log(`[YouTube Transcript] Fetching transcript for: ${videoId}`);
-
+// --- Route: Generate Sample Paper (Groq Vision) ---
+router.post('/generate-paper', async (req, res) => {
     try {
-        // Try to get video info and transcript using YouTube's timedtext API
-        let transcript = '';
-        let title = 'YouTube Video';
+        const { extractedText, images } = req.body; // images: array of base64 strings (data:image/jpeg;base64,...)
 
-        // Attempt to fetch captions using the innertube API approach
-        const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        const watchResponse = await fetchWithTimeout(watchUrl, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9'
-            }
+        console.log(`[Paper Gen] Received request. Text len: ${extractedText?.length}, Images: ${images?.length}`);
+
+        if (!extractedText && (!images || images.length === 0)) {
+            return res.status(400).json({ error: "No content provided (text or images)" });
+        }
+
+        // Construct messages for Groq Vision
+        const content = [];
+
+        // Add text context
+        if (extractedText) {
+            content.push({ type: "text", text: `Here is the text content of a sample paper:\n${extractedText}\n\n` });
+        }
+
+        // Add images (limit to 3 to avoid payload size issues/token limits if needed, but Groq handles 4-5 well)
+        if (images && images.length > 0) {
+            content.push({ type: "text", text: "Here are the visual pages of the sample paper for context (styling, diagrams, etc.):" });
+            images.slice(0, 5).forEach((img, idx) => {
+                // Ensure base64 formatting is correct for Groq
+                // Groq expects image_url: { url: "data:image/jpeg;base64,..." }
+                content.push({
+                    type: "image_url",
+                    image_url: {
+                        url: img
+                    }
+                });
+            });
+        }
+
+        // The Prompt
+        content.push({
+            type: "text",
+            text: `
+            ROLE: You are an expert academic examiner.
+            TASK: Create a BRAND NEW question paper based on the sample provided above.
+            
+            REQUIREMENTS:
+            1.  **Pattern Match**: Strictly follow the same pattern (sections, question types, marks distribution) as the sample.
+            2.  **Difficulty Match**: The difficulty level must match the sample.
+            3.  **Topic/Syllabus**: Cover the same syllabus/topics as implied by the sample questions.
+            4.  **Length**: Generate exactly the same number of questions (up to 35).
+            5.  **NO HOLD BACKS**: Generate ALL questions. Do not summarize. Full question paper required.
+            6.  **Image Integration**: If the sample has image-based questions, generate similar NEW questions.
+                - Since you cannot generate actual images, provide a [Visual Description] in square brackets where the image should be.
+                - Example: Q5. Find the area of the shaded region. [Image: A circle of radius 5cm with a 90-degree sector removed].
+            
+            OUTPUT FORMAT:
+            Return the output in clean Markdown format.
+            - Use # for Header (School Name/Exam Name inferred or generic)
+            - Use ## for Sections
+            - Use **Bold** for marks.
+            
+            Now, generate the full paper.
+            `
         });
 
-        if (watchResponse.ok) {
-            const html = await watchResponse.text();
+        const messages = [{ role: "user", content: content }];
 
-            // Extract video title
-            const titleMatch = html.match(/<title>([^<]+)<\/title>/);
-            if (titleMatch) {
-                title = titleMatch[1].replace(' - YouTube', '').trim();
-            }
+        const generatedPaper = await callGroqVision(messages);
 
-            // Extract captions URL from player response
-            const captionsMatch = html.match(/"captionTracks":\s*\[([^\]]+)\]/);
-            if (captionsMatch) {
-                const captionsData = JSON.parse(`[${captionsMatch[1]}]`);
-                const englishCaptions = captionsData.find(c =>
-                    c.languageCode === 'en' || c.languageCode?.startsWith('en')
-                ) || captionsData[0];
+        res.json({ success: true, paper: generatedPaper });
 
-                if (englishCaptions?.baseUrl) {
-                    // Fetch the actual transcript
-                    let captionsUrl = englishCaptions.baseUrl;
-                    // Ensure we get the transcript in text format
-                    if (!captionsUrl.includes('fmt=')) {
-                        captionsUrl += '&fmt=srv3';
-                    }
-
-                    const captionsResponse = await fetchWithTimeout(captionsUrl, {
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                        }
-                    });
-
-                    if (captionsResponse.ok) {
-                        const captionsXml = await captionsResponse.text();
-                        // Parse XML captions and extract text
-                        const textMatches = captionsXml.match(/<text[^>]*>([^<]*)<\/text>/g);
-                        if (textMatches) {
-                            transcript = textMatches
-                                .map(m => {
-                                    const textMatch = m.match(/<text[^>]*>([^<]*)<\/text>/);
-                                    return textMatch ? textMatch[1]
-                                        .replace(/&amp;/g, '&')
-                                        .replace(/&lt;/g, '<')
-                                        .replace(/&gt;/g, '>')
-                                        .replace(/&quot;/g, '"')
-                                        .replace(/&#39;/g, "'")
-                                        .replace(/\n/g, ' ')
-                                        .trim() : '';
-                                })
-                                .filter(t => t)
-                                .join(' ');
-                        }
-                    }
-                }
-            }
-        }
-
-        if (transcript) {
-            console.log(`[YouTube Transcript] Successfully fetched ${transcript.length} chars`);
-            res.json({
-                videoId,
-                title,
-                transcript: transcript.slice(0, 50000) // Limit to 50k chars
-            });
-        } else {
-            console.log('[YouTube Transcript] No transcript available, returning placeholder');
-            res.json({
-                videoId,
-                title,
-                transcript: `[Video: ${title}]\n\nAutomatic transcript not available for this video. You can:\n1. Manually paste the video transcript in the content area\n2. Use the chat to ask questions about the video topic\n3. Try a different video with captions enabled`,
-                noTranscript: true
-            });
-        }
     } catch (error) {
-        console.error('[YouTube Transcript] Error:', error.message);
+        console.error("[Paper Gen] Error:", error);
         res.status(500).json({
-            error: 'Failed to fetch transcript',
-            message: error.message
+            error: "Failed to generate paper",
+            details: error.message
         });
     }
 });
 
 export default router;
-

@@ -28,10 +28,10 @@ const Sidebar = ({ currentView, setCurrentView, isSidebarOpen, setIsSidebarOpen,
 
             {/* Sidebar Container */}
             <aside className={`
-                fixed md:relative z-50 h-[96vh] my-[2vh] ml-[2vh]
+                fixed md:relative z-50 h-full md:h-[96vh] md:my-[2vh] ml-0 md:ml-[2vh]
                 transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1)
-                ${isCollapsed ? 'w-20' : 'w-72'}
-                ${isSidebarOpen ? 'translate-x-0' : '-translate-x-[120%] md:translate-x-0'}
+                ${isCollapsed ? 'w-20' : 'w-[280px] md:w-72'}
+                ${isSidebarOpen ? 'translate-x-0 left-0' : '-translate-x-full md:translate-x-0'}
             `}>
                 <div className={`
                     h-full flex flex-col rounded-3xl border border-white/10 shadow-2xl overflow-hidden
@@ -88,7 +88,12 @@ const Sidebar = ({ currentView, setCurrentView, isSidebarOpen, setIsSidebarOpen,
                                     <Icon className={`w-5 h-5 transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
 
                                     {!isCollapsed && (
-                                        <span className="font-medium truncate">{item.label}</span>
+                                        <div className="flex items-center w-full">
+                                            <span className="font-medium truncate">{item.label}</span>
+                                            {item.isPro && !isPro && !isDevMode && (
+                                                <Crown className="w-3 h-3 text-amber-500 ml-2 animate-pulse" />
+                                            )}
+                                        </div>
                                     )}
 
                                     {/* Hover 3D effect hint */}

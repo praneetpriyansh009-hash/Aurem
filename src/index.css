@@ -329,3 +329,126 @@
     transform: translateY(0) rotateX(360deg) rotateY(360deg);
   }
 }
+
+/* ============================================
+   Mobile Responsiveness Utilities
+   ============================================ */
+
+/* Fix viewport on iOS */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Touch-friendly targets - minimum 44px */
+@media (max-width: 768px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Better tap areas for buttons */
+  button,
+  a,
+  [role="button"] {
+    min-height: 44px;
+  }
+
+  /* Prevent horizontal scroll */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Fix iOS momentum scrolling */
+  .custom-scrollbar {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Mobile-friendly padding */
+  .mobile-padding {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Hide decorative elements on mobile for performance */
+  .hide-on-mobile {
+    display: none !important;
+  }
+
+  /* Full width elements on mobile */
+  .mobile-full-width {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Stack flex items on mobile */
+  .mobile-stack {
+    flex-direction: column !important;
+  }
+
+  /* Smaller text on mobile */
+  .mobile-text-sm {
+    font-size: 0.875rem !important;
+  }
+
+  /* Mobile margins */
+  .mobile-my-2 {
+    margin-top: 0.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+}
+
+/* Small mobile devices (less than 380px) */
+@media (max-width: 380px) {
+  html {
+    font-size: 14px;
+  }
+
+  /* Even smaller padding on tiny screens */
+  .mobile-padding {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Prevent rubber banding on iOS while keeping scroll */
+@media (max-width: 768px) {
+  .scroll-container {
+    overscroll-behavior: contain;
+  }
+}
+
+/* Mobile animation performance */
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Fix input zoom on iOS - minimum 16px font */
+@media (max-width: 768px) {
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
