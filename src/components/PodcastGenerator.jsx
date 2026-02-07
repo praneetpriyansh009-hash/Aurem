@@ -12,6 +12,10 @@ import { PODCAST_API_URL, useRetryableFetch } from '../utils/api';
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs';
 
+// Kokoro TTS will be lazily loaded on first play
+let kokoroTTS = null;
+let kokoroVoices = {};
+
 const PodcastGenerator = () => {
     const { isDark } = useTheme();
     const { retryableFetch } = useRetryableFetch();
@@ -251,15 +255,71 @@ const PodcastGenerator = () => {
         }
     };
 
-    // --- Audio Playback (Browser SpeechSynthesis - Free & Reliable) ---
-    const synthRef = useRef(window.speechSynthesis);
-    const utteranceRef = useRef(null);
+    // --- Audio Playback using Kokoro TTS (Natural AI Voices - Free & High Quality) ---
+    const audioRef = useRef(null);
+    const audioContextRef = useRef(null);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+    const [kokoroReady, setKokoroReady] = useState(false);
+    const [kokoroLoadingProgress, setKokoroLoadingProgress] = useState('');
 
+    // Initialize Kokoro TTS (lazy load on first play)
+    const initKokoro = async () => {
+        if (kokoroTTS) {
+            setKokoroReady(true);
+            return true;
+        }
+
+        try {
+            setKokoroLoadingProgress('Loading AI voice model (first time only)...');
+
+            // Dynamically import kokoro-js
+            const { KokoroTTS } = await import('kokoro-js');
+
+            setKokoroLoadingProgress('Initializing voices...');
+
+            // Initialize with the default model (quantized for smaller size)
+            kokoroTTS = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
+                dtype: 'q4', // Quantized = smaller download (~20MB instead of 80MB)
+                device: 'wasm' // WebAssembly for browser compatibility
+            });
+
+            // Get available voices
+            const availableVoices = kokoroTTS.list_voices();
+            console.log('[Kokoro] Available voices:', availableVoices);
+
+            // Select good voices for our hosts
+            // af = American Female, am = American Male
+            kokoroVoices = {
+                // Sam = Female voice - warm and friendly
+                sam: availableVoices.includes('af_bella') ? 'af_bella' :
+                    availableVoices.includes('af_sky') ? 'af_sky' :
+                        availableVoices[0],
+                // Alex = Male voice - clear and professional
+                alex: availableVoices.includes('am_michael') ? 'am_michael' :
+                    availableVoices.includes('am_adam') ? 'am_adam' :
+                        availableVoices.includes('bf_emma') ? 'bf_emma' : // British female as fallback
+                            availableVoices[1] || availableVoices[0]
+            };
+
+            console.log('[Kokoro] Using voices - Alex:', kokoroVoices.alex, 'Sam:', kokoroVoices.sam);
+
+            setKokoroReady(true);
+            setKokoroLoadingProgress('');
+            return true;
+        } catch (error) {
+            console.error('[Kokoro] Failed to initialize:', error);
+            setKokoroLoadingProgress('');
+            // Fall back to browser speech
+            return false;
+        }
+    };
+
+    // Generate and play audio for a line using Kokoro
     const speakLine = async (index) => {
-        // Stop any current speech
-        if (synthRef.current.speaking) {
-            synthRef.current.cancel();
+        // Stop any current audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
         }
 
         if (index >= podcastScript.length) {
@@ -274,92 +334,115 @@ const PodcastGenerator = () => {
 
         try {
             const line = podcastScript[index];
-            const utterance = new SpeechSynthesisUtterance(line.text);
 
-            // Get voices - use state (pre-loaded) or fetch fresh
-            const availableVoices = voices.length > 0 ? voices : synthRef.current.getVoices();
-
-            // Helper functions to identify voice gender
-            const isMaleVoice = (voice) => {
-                const name = voice.name.toLowerCase();
-                return name.includes('male') ||
-                    name.includes('david') ||
-                    name.includes('james') ||
-                    name.includes('mark') ||
-                    name.includes('daniel') ||
-                    name.includes('google uk english male') ||
-                    name.includes('microsoft david') ||
-                    name.includes('microsoft mark');
-            };
-
-            const isFemaleVoice = (voice) => {
-                const name = voice.name.toLowerCase();
-                return name.includes('female') ||
-                    name.includes('samantha') ||
-                    name.includes('victoria') ||
-                    name.includes('karen') ||
-                    name.includes('moira') ||
-                    name.includes('fiona') ||
-                    name.includes('google uk english female') ||
-                    name.includes('microsoft zira') ||
-                    name.includes('microsoft hazel');
-            };
-
-            // Select distinct voices for Alex (Male) and Sam (Female)
-            // Add natural pauses by inserting slight breaks after sentences
-            const addNaturalPauses = (text) => {
-                // Add slight pauses (using SSML-like approach won't work, so we just ensure proper punctuation)
-                return text
-                    .replace(/\.\s+/g, '. ... ')  // Add pause after periods
-                    .replace(/\?\s+/g, '? ... ')  // Add pause after questions
-                    .replace(/!\s+/g, '! ... ');  // Add pause after exclamations
-            };
-
-            // Apply natural pauses to text
-            utterance.text = addNaturalPauses(line.text);
-
-            if (line.speaker === 'Alex') {
-                // Alex = MALE voice - slightly deeper but natural
-                const alexVoice =
-                    availableVoices.find(v => isMaleVoice(v) && v.lang.includes('en')) ||
-                    availableVoices.find(v => v.lang.includes('en-GB')) ||
-                    availableVoices.find(v => v.lang.includes('en')) ||
-                    availableVoices[0];
-
-                utterance.voice = alexVoice;
-                utterance.pitch = 0.95; // Slightly lower but natural (was 0.85 - too robotic)
-                utterance.rate = 0.92;  // Slower for conversational feel
-                utterance.volume = 1.0;
-                console.log('[Podcast] Alex voice:', alexVoice?.name);
-            } else {
-                // Sam = FEMALE voice - natural pitch, warm conversational
-                const samVoice =
-                    availableVoices.find(v => isFemaleVoice(v) && v.lang.includes('en')) ||
-                    availableVoices.find(v => v.lang.includes('en-US') && !isMaleVoice(v)) ||
-                    availableVoices.find(v => v.lang.includes('en') && v !== availableVoices[0]) ||
-                    availableVoices[1] || availableVoices[0];
-
-                utterance.voice = samVoice;
-                utterance.pitch = 1.05; // Slightly higher but natural (was 1.2 - too robotic)
-                utterance.rate = 0.88;  // Slightly slower for explanations
-                utterance.volume = 1.0;
-                console.log('[Podcast] Sam voice:', samVoice?.name);
+            // Try Kokoro first
+            if (!kokoroTTS) {
+                const initialized = await initKokoro();
+                if (!initialized) {
+                    // Fallback to browser speech
+                    await speakLineWithBrowserTTS(index);
+                    return;
+                }
             }
 
-            utteranceRef.current = utterance;
+            // Generate audio with Kokoro
+            const voice = line.speaker === 'Alex' ? kokoroVoices.alex : kokoroVoices.sam;
+            console.log(`[Kokoro] Generating audio for ${line.speaker} using voice: ${voice}`);
 
-            // Handle End of Line - USE REF to avoid stale closure
-            utterance.onend = () => {
+            const audio = await kokoroTTS.generate(line.text, { voice });
+
+            // Convert to playable audio
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            // Get audio data and create a blob URL
+            const wavBlob = new Blob([audio.toWav()], { type: 'audio/wav' });
+            const audioUrl = URL.createObjectURL(wavBlob);
+
+            // Create and play audio element
+            audioRef.current = new Audio(audioUrl);
+            audioRef.current.playbackRate = line.speaker === 'Alex' ? 1.0 : 0.95; // Slightly slower for Sam
+
+            audioRef.current.onended = () => {
                 setIsLoadingAudio(false);
-                // Check if we are still "playing" (user didn't pause) - USE REF!
+                URL.revokeObjectURL(audioUrl); // Clean up blob URL
                 if (isPlayingRef.current) {
                     speakLine(index + 1);
                 }
             };
 
-            // Handle Errors
-            utterance.onerror = (e) => {
-                console.error("Speech error", e);
+            audioRef.current.onerror = (e) => {
+                console.error('[Kokoro] Playback error:', e);
+                setIsLoadingAudio(false);
+                URL.revokeObjectURL(audioUrl);
+                // Try next line anyway
+                if (isPlayingRef.current) {
+                    speakLine(index + 1);
+                }
+            };
+
+            audioRef.current.oncanplaythrough = () => {
+                setIsLoadingAudio(false);
+            };
+
+            await audioRef.current.play();
+
+        } catch (error) {
+            console.error('[Kokoro] TTS Error:', error);
+            // Fallback to browser speech synthesis
+            await speakLineWithBrowserTTS(index);
+        }
+    };
+
+    // Fallback: Browser SpeechSynthesis
+    const synthRef = useRef(window.speechSynthesis);
+    const utteranceRef = useRef(null);
+
+    const speakLineWithBrowserTTS = async (index) => {
+        if (synthRef.current.speaking) {
+            synthRef.current.cancel();
+        }
+
+        if (index >= podcastScript.length) {
+            setIsPlaybackFinished(true);
+            setIsPlaying(false);
+            return;
+        }
+
+        setCurrentLineIndex(index);
+        setIsLoadingAudio(true);
+
+        try {
+            const line = podcastScript[index];
+            const utterance = new SpeechSynthesisUtterance(line.text);
+            const availableVoices = voices.length > 0 ? voices : synthRef.current.getVoices();
+
+            // Simple voice selection
+            if (line.speaker === 'Alex') {
+                utterance.pitch = 0.95;
+                utterance.rate = 0.92;
+            } else {
+                utterance.pitch = 1.05;
+                utterance.rate = 0.88;
+            }
+            utterance.volume = 1.0;
+
+            if (availableVoices.length > 0) {
+                const englishVoice = availableVoices.find(v => v.lang.includes('en'));
+                if (englishVoice) utterance.voice = englishVoice;
+            }
+
+            utteranceRef.current = utterance;
+
+            utterance.onend = () => {
+                setIsLoadingAudio(false);
+                if (isPlayingRef.current) {
+                    speakLineWithBrowserTTS(index + 1);
+                }
+            };
+
+            utterance.onerror = () => {
                 setIsLoadingAudio(false);
                 setIsPlaying(false);
             };
@@ -368,14 +451,11 @@ const PodcastGenerator = () => {
                 setIsLoadingAudio(false);
             };
 
-            // Start speaking
             synthRef.current.speak(utterance);
-
         } catch (error) {
-            console.error("TTS Error:", error);
+            console.error('Browser TTS Error:', error);
             setIsLoadingAudio(false);
             setIsPlaying(false);
-            alert("Speech synthesis not supported in this browser.");
         }
     };
 
@@ -384,6 +464,11 @@ const PodcastGenerator = () => {
         if (isPlaying) {
             // PAUSE ACTION
             setIsPlaying(false);
+            // Pause Kokoro audio if playing
+            if (audioRef.current && !audioRef.current.paused) {
+                audioRef.current.pause();
+            }
+            // Also handle browser speech fallback
             if (synthRef.current.speaking) {
                 synthRef.current.pause();
             }
@@ -392,16 +477,26 @@ const PodcastGenerator = () => {
             setIsPlaying(true);
             setIsPlaybackFinished(false);
 
-            // Resume or Start
-            if (synthRef.current.paused) {
+            // Resume Kokoro audio if paused
+            if (audioRef.current && audioRef.current.paused && audioRef.current.currentTime > 0) {
+                audioRef.current.play();
+            } else if (synthRef.current.paused) {
+                // Resume browser speech if paused
                 synthRef.current.resume();
             } else {
+                // Start fresh
                 speakLine(currentLineIndex === -1 ? 0 : currentLineIndex);
             }
         }
     };
 
     const stopPlayback = () => {
+        // Stop Kokoro audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+        }
+        // Stop browser speech fallback
         if (synthRef.current.speaking) {
             synthRef.current.cancel();
         }

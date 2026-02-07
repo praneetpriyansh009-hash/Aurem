@@ -22,6 +22,7 @@
         "grok-sdk": "^0.0.1-security",
         "helmet": "^8.1.0",
         "jsonwebtoken": "^9.0.2",
+        "kokoro-js": "^1.2.1",
         "lucide-react": "^0.344.0",
         "mongoose": "^8.2.1",
         "node-fetch": "^3.3.2",
