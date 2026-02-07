@@ -109,11 +109,46 @@ const callGroqStealth = async (messages) => {
 // --- Route: Podcast ---
 // --- Route: Podcast ---
 router.post('/podcast', async (req, res) => {
-    const { content, topics, mode, syllabus, tier } = req.body;
+    const { content, topics, mode, syllabus, tier, images } = req.body;
     try {
-        const topicContent = mode === 'syllabus'
-            ? `Subject: ${syllabus.subject}, Topic: ${syllabus.topic}, Level: ${syllabus.level}`
-            : (content ? content.substring(0, 2000) : 'general educational topic');
+        let topicContent;
+
+        // If images are provided (handwritten PDF), extract text using vision first
+        if (images && images.length > 0) {
+            console.log(`[Podcast] Extracting content from ${images.length} handwritten images...`);
+
+            // Build vision request to extract text from handwritten notes
+            const visionContent = [
+                {
+                    type: "text",
+                    text: "You are an expert at reading handwritten notes. Please carefully extract and transcribe ALL the text content from these handwritten pages. Include all formulas, definitions, equations, and notes. Format the extracted content clearly with proper structure."
+                }
+            ];
+
+            // Add images (limit to 5 for API limits)
+            images.slice(0, 5).forEach(imgUrl => {
+                visionContent.push({
+                    type: "image_url",
+                    image_url: { url: imgUrl }
+                });
+            });
+
+            const visionMessages = [{ role: "user", content: visionContent }];
+
+            try {
+                const extractedResult = await callGroqVision(visionMessages);
+                const extractedText = extractedResult.choices[0]?.message?.content || '';
+                topicContent = extractedText.substring(0, 4000); // Use extracted text
+                console.log(`[Podcast] Extracted ${extractedText.length} chars from handwritten notes`);
+            } catch (visionError) {
+                console.error("[Podcast] Vision extraction failed:", visionError.message);
+                topicContent = "handwritten notes (extraction failed - generating generic content)";
+            }
+        } else if (mode === 'syllabus') {
+            topicContent = `Subject: ${syllabus.subject}, Topic: ${syllabus.topic}, Level: ${syllabus.level}`;
+        } else {
+            topicContent = content ? content.substring(0, 2000) : 'general educational topic';
+        }
 
         const exchanges = tier === 'pro' ? 30 : 18;
 

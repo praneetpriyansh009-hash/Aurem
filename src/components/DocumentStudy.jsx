@@ -17,6 +17,7 @@ const DocumentStudy = () => {
     // State
     const [documentContent, setDocumentContent] = useState('');
     const [fileData, setFileData] = useState(null); // { mimeType, data (base64) } for vision
+    const [pdfImages, setPdfImages] = useState([]); // Array of base64 images from PDF pages (for handwritten)
     const [fileName, setFileName] = useState('');
     const [isDragging, setIsDragging] = useState(false);
 
@@ -64,22 +65,72 @@ const DocumentStudy = () => {
         });
     };
 
+    // Convert PDF pages to images (for handwritten notes)
+    const convertPdfToImages = async (arrayBuffer, maxPages = 5) => {
+        try {
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const images = [];
+            const pagesToRender = Math.min(pdf.numPages, maxPages);
+
+            console.log(`[AuremLens] Converting ${pagesToRender} PDF pages to images for vision OCR...`);
+
+            for (let i = 1; i <= pagesToRender; i++) {
+                const page = await pdf.getPage(i);
+                const scale = 1.5; // Good balance of quality vs size
+                const viewport = page.getViewport({ scale });
+
+                // Create canvas for rendering
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                // Render PDF page to canvas
+                await page.render({
+                    canvasContext: context,
+                    viewport: viewport
+                }).promise;
+
+                // Convert canvas to base64 JPEG (smaller than PNG)
+                const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+                images.push({
+                    pageNum: i,
+                    data: base64,
+                    mimeType: 'image/jpeg'
+                });
+
+                console.log(`[AuremLens] Page ${i} converted (${Math.round(base64.length / 1024)}KB)`);
+            }
+
+            return images;
+        } catch (err) {
+            console.error("PDF to image conversion error:", err);
+            return [];
+        }
+    };
+
     const extractPdfTextPreview = async (arrayBuffer) => {
         try {
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             let fullText = '';
+            let totalChars = 0;
             const pagesToRead = Math.min(pdf.numPages, 10); // Limit to 10 pages
+
             for (let i = 1; i <= pagesToRead; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
                 const pageText = textContent.items.map(item => item.str).join(' ');
                 fullText += `--- Page ${i} ---\n${pageText}\n\n`;
+                totalChars += pageText.replace(/\s/g, '').length; // Count non-whitespace chars
             }
+
             if (pdf.numPages > 10) fullText += `\n... (Remaining ${pdf.numPages - 10} pages truncacted for performance)`;
-            return fullText.trim();
+
+            // Return text and char count (to detect handwritten PDFs)
+            return { text: fullText.trim(), charCount: totalChars, totalPages: pdf.numPages };
         } catch (err) {
             console.error("PDF extraction error:", err);
-            return `Error reading PDF: ${err.message}`;
+            return { text: '', charCount: 0, totalPages: 0 };
         }
     };
 
@@ -87,16 +138,42 @@ const DocumentStudy = () => {
         if (!file) return;
 
         setIsPdfLoading(true);
-        setIsPdfLoading(true);
+        setPdfImages([]); // Reset PDF images
+
         try {
             let content = '';
             let mimeType = file.type;
             let base64 = null;
+            let pdfPageImages = [];
 
             if (file.type === 'application/pdf') {
                 const arrayBuffer = await file.arrayBuffer();
-                content = await extractPdfTextPreview(arrayBuffer) || '';
-                if (!content) content = "[PDF Content Extracted]";
+
+                // Clone the arrayBuffer for reuse (PDF.js consumes it)
+                const arrayBufferForText = arrayBuffer.slice(0);
+                const arrayBufferForImages = arrayBuffer.slice(0);
+
+                const { text, charCount, totalPages } = await extractPdfTextPreview(arrayBufferForText);
+
+                // Detect if PDF is likely handwritten (very low text per page)
+                const avgCharsPerPage = charCount / Math.max(totalPages, 1);
+                const isLikelyHandwritten = avgCharsPerPage < 100; // Less than 100 chars per page = handwritten
+
+                console.log(`[AuremLens] PDF Analysis: ${charCount} chars, ${totalPages} pages, ${avgCharsPerPage.toFixed(0)} avg per page. Handwritten: ${isLikelyHandwritten}`);
+
+                if (isLikelyHandwritten) {
+                    // Convert to images for vision processing (using fresh copy of buffer)
+                    pdfPageImages = await convertPdfToImages(arrayBufferForImages, 5);
+                    content = `[Handwritten PDF detected - ${pdfPageImages.length} pages converted to images for AI vision analysis]`;
+
+                    // Also set the first image as fileData for immediate vision support
+                    if (pdfPageImages.length > 0) {
+                        base64 = pdfPageImages[0].data;
+                        mimeType = 'image/jpeg';
+                    }
+                } else {
+                    content = text || '[PDF Content Extracted]';
+                }
             } else if (file.type.startsWith('image/')) {
                 base64 = await fileToBase64(file);
                 content = `[Image Loaded: ${file.name}]`;
@@ -107,6 +184,7 @@ const DocumentStudy = () => {
             setFileName(file.name);
             setDocumentContent(content);
             setFileData(base64 ? { mimeType, data: base64 } : null);
+            setPdfImages(pdfPageImages);
             setChatMessages([]);
             setResult('');
             setFlashcards([]);
@@ -124,6 +202,7 @@ const DocumentStudy = () => {
         setFileName('');
         setDocumentContent('');
         setFileData(null);
+        setPdfImages([]);
     };
 
 
@@ -137,21 +216,38 @@ const DocumentStudy = () => {
         try {
             let payload;
 
-            // Vision Request (Llama 3.2 11B Vision)
-            if (fileData) {
+            // Vision Request - handles single image OR multiple PDF page images
+            const hasVisionContent = fileData || (pdfImages && pdfImages.length > 0);
+
+            if (hasVisionContent) {
+                // Build content array with text prompt first
+                const content = [
+                    { type: "text", text: taskPrompt(prompt, systemPrompt) }
+                ];
+
+                // Add images - either single file or multiple PDF pages
+                if (pdfImages && pdfImages.length > 0) {
+                    // Multiple PDF page images (handwritten notes)
+                    console.log(`[AuremLens] Sending ${pdfImages.length} PDF page images to vision API`);
+                    pdfImages.forEach((img, idx) => {
+                        content.push({
+                            type: "image_url",
+                            image_url: { url: `data:${img.mimeType};base64,${img.data}` }
+                        });
+                    });
+                } else if (fileData) {
+                    // Single image file
+                    content.push({
+                        type: "image_url",
+                        image_url: { url: `data:${fileData.mimeType};base64,${fileData.data}` }
+                    });
+                }
+
                 payload = {
                     model: "llama-3.2-11b-vision-preview",
-                    messages: [
-                        {
-                            role: "user",
-                            content: [
-                                { type: "text", text: taskPrompt(prompt, systemPrompt) },
-                                { type: "image_url", image_url: { url: `data:${fileData.mimeType};base64,${fileData.data}` } }
-                            ]
-                        }
-                    ],
+                    messages: [{ role: "user", content }],
                     temperature: 0.5,
-                    max_tokens: jsonMode ? 4096 : 1024
+                    max_tokens: jsonMode ? 8192 : 4096 // Increased for multi-page analysis
                 };
             }
             // Text Request (Llama 3.1 8B)

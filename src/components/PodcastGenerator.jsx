@@ -26,6 +26,7 @@ const PodcastGenerator = () => {
     const [isPdfLoading, setIsPdfLoading] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [topics, setTopics] = useState('');
+    const [pdfImages, setPdfImages] = useState([]); // For handwritten PDFs - images sent to vision API
 
     // Syllabus Mode State
     const [syllabus, setSyllabus] = useState({
@@ -44,6 +45,36 @@ const PodcastGenerator = () => {
     const fileInputRef = useRef(null);
     // Using browser SpeechSynthesis now
 
+    // Voice state for better mobile support
+    const [voices, setVoices] = useState([]);
+    const isPlayingRef = useRef(false); // Ref to track playing state in callbacks
+
+    // Load voices - critical for mobile where voices load async
+    useEffect(() => {
+        const loadVoices = () => {
+            const availableVoices = window.speechSynthesis.getVoices();
+            if (availableVoices.length > 0) {
+                setVoices(availableVoices);
+                console.log('[Podcast] Loaded voices:', availableVoices.length);
+            }
+        };
+
+        // Load immediately if available
+        loadVoices();
+
+        // Also listen for voiceschanged (required for mobile/some browsers)
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+
+        return () => {
+            window.speechSynthesis.onvoiceschanged = null;
+        };
+    }, []);
+
+    // Keep isPlayingRef in sync
+    useEffect(() => {
+        isPlayingRef.current = isPlaying;
+    }, [isPlaying]);
+
     // --- Cleanup on Unmount ---
     useEffect(() => {
         return () => {
@@ -54,38 +85,107 @@ const PodcastGenerator = () => {
     }, []);
 
 
+
     // --- File Handling ---
+
+    // Convert PDF pages to images (for handwritten notes)
+    const convertPdfToImages = async (arrayBuffer, maxPages = 5) => {
+        try {
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const images = [];
+            const pagesToRender = Math.min(pdf.numPages, maxPages);
+
+            console.log(`[Podcast] Converting ${pagesToRender} PDF pages to images for vision...`);
+
+            for (let i = 1; i <= pagesToRender; i++) {
+                const page = await pdf.getPage(i);
+                const scale = 1.5;
+                const viewport = page.getViewport({ scale });
+
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                await page.render({
+                    canvasContext: context,
+                    viewport: viewport
+                }).promise;
+
+                const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+                images.push({
+                    pageNum: i,
+                    data: base64,
+                    mimeType: 'image/jpeg'
+                });
+            }
+
+            return images;
+        } catch (err) {
+            console.error("PDF to image conversion error:", err);
+            return [];
+        }
+    };
+
     const extractPdfTextPreview = async (arrayBuffer) => {
         try {
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             let fullText = '';
+            let totalChars = 0;
             const pagesToRead = Math.min(pdf.numPages, 10);
+
             for (let i = 1; i <= pagesToRead; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
                 const pageText = textContent.items.map(item => item.str).join(' ');
                 fullText += `--- Page ${i} ---\n${pageText}\n\n`;
+                totalChars += pageText.replace(/\s/g, '').length;
             }
-            return fullText.trim();
+
+            return { text: fullText.trim(), charCount: totalChars, totalPages: pdf.numPages };
         } catch (err) {
             console.error("PDF extraction error:", err);
-            return `Error reading PDF: ${err.message}`;
+            return { text: '', charCount: 0, totalPages: 0 };
         }
     };
 
     const processFile = async (file) => {
         if (!file) return;
         setIsPdfLoading(true);
+        setPdfImages([]);
+
         try {
             let content = '';
+            let pdfPageImages = [];
+
             if (file.type === 'application/pdf') {
                 const arrayBuffer = await file.arrayBuffer();
-                content = await extractPdfTextPreview(arrayBuffer) || '';
+
+                // Clone the arrayBuffer for reuse (PDF.js consumes it)
+                const arrayBufferForText = arrayBuffer.slice(0);
+                const arrayBufferForImages = arrayBuffer.slice(0);
+
+                const { text, charCount, totalPages } = await extractPdfTextPreview(arrayBufferForText);
+
+                // Detect handwritten PDF (low text content)
+                const avgCharsPerPage = charCount / Math.max(totalPages, 1);
+                const isLikelyHandwritten = avgCharsPerPage < 100;
+
+                console.log(`[Podcast] PDF: ${charCount} chars, ${totalPages} pages. Handwritten: ${isLikelyHandwritten}`);
+
+                if (isLikelyHandwritten) {
+                    pdfPageImages = await convertPdfToImages(arrayBufferForImages, 5);
+                    content = `[Handwritten PDF - ${pdfPageImages.length} pages ready for vision analysis]`;
+                } else {
+                    content = text || '';
+                }
             } else {
                 content = await file.text();
             }
+
             setFileName(file.name);
             setDocumentContent(content);
+            setPdfImages(pdfPageImages);
             setPodcastScript([]);
             setCurrentLineIndex(-1);
             setIsPlaybackFinished(false);
@@ -113,16 +213,24 @@ const PodcastGenerator = () => {
         setPodcastScript([]);
 
         try {
+            // Prepare images for vision processing if handwritten PDF
+            const imageUrls = pdfImages.length > 0
+                ? pdfImages.map(img => `data:${img.mimeType};base64,${img.data}`)
+                : null;
+
+            console.log(`[Podcast] Generating with ${pdfImages.length} images`);
+
             const response = await retryableFetch(PODCAST_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     mode: activeMode,
-                    provider: 'groq', // Always use Groq
-                    tier: isPro ? 'pro' : 'basic', // Send tier for length adjustment
+                    provider: 'groq',
+                    tier: isPro ? 'pro' : 'basic',
                     content: activeMode === 'upload' ? documentContent.slice(0, 8000) : null,
                     topics: activeMode === 'upload' ? topics : null,
-                    syllabus: activeMode === 'syllabus' ? syllabus : null
+                    syllabus: activeMode === 'syllabus' ? syllabus : null,
+                    images: imageUrls // Send PDF page images for vision processing
                 })
             });
 
@@ -168,31 +276,83 @@ const PodcastGenerator = () => {
             const line = podcastScript[index];
             const utterance = new SpeechSynthesisUtterance(line.text);
 
-            // Different voices for Alex and Sam
-            const voices = synthRef.current.getVoices();
+            // Get voices - use state (pre-loaded) or fetch fresh
+            const availableVoices = voices.length > 0 ? voices : synthRef.current.getVoices();
+
+            // Helper functions to identify voice gender
+            const isMaleVoice = (voice) => {
+                const name = voice.name.toLowerCase();
+                return name.includes('male') ||
+                    name.includes('david') ||
+                    name.includes('james') ||
+                    name.includes('mark') ||
+                    name.includes('daniel') ||
+                    name.includes('google uk english male') ||
+                    name.includes('microsoft david') ||
+                    name.includes('microsoft mark');
+            };
+
+            const isFemaleVoice = (voice) => {
+                const name = voice.name.toLowerCase();
+                return name.includes('female') ||
+                    name.includes('samantha') ||
+                    name.includes('victoria') ||
+                    name.includes('karen') ||
+                    name.includes('moira') ||
+                    name.includes('fiona') ||
+                    name.includes('google uk english female') ||
+                    name.includes('microsoft zira') ||
+                    name.includes('microsoft hazel');
+            };
+
+            // Select distinct voices for Alex (Male) and Sam (Female)
+            // Add natural pauses by inserting slight breaks after sentences
+            const addNaturalPauses = (text) => {
+                // Add slight pauses (using SSML-like approach won't work, so we just ensure proper punctuation)
+                return text
+                    .replace(/\.\s+/g, '. ... ')  // Add pause after periods
+                    .replace(/\?\s+/g, '? ... ')  // Add pause after questions
+                    .replace(/!\s+/g, '! ... ');  // Add pause after exclamations
+            };
+
+            // Apply natural pauses to text
+            utterance.text = addNaturalPauses(line.text);
+
             if (line.speaker === 'Alex') {
-                // Try to get a British voice for Alex
-                const alexVoice = voices.find(v => v.lang.includes('en-GB')) ||
-                    voices.find(v => v.lang.includes('en')) || voices[0];
+                // Alex = MALE voice - slightly deeper but natural
+                const alexVoice =
+                    availableVoices.find(v => isMaleVoice(v) && v.lang.includes('en')) ||
+                    availableVoices.find(v => v.lang.includes('en-GB')) ||
+                    availableVoices.find(v => v.lang.includes('en')) ||
+                    availableVoices[0];
+
                 utterance.voice = alexVoice;
-                utterance.pitch = 1.1;
-                utterance.rate = 1.0;
+                utterance.pitch = 0.95; // Slightly lower but natural (was 0.85 - too robotic)
+                utterance.rate = 0.92;  // Slower for conversational feel
+                utterance.volume = 1.0;
+                console.log('[Podcast] Alex voice:', alexVoice?.name);
             } else {
-                // Different voice for Sam
-                const samVoice = voices.find(v => v.lang.includes('en-US') && v.name !== voices[0]?.name) ||
-                    voices.find(v => v.lang.includes('en')) || voices[1] || voices[0];
+                // Sam = FEMALE voice - natural pitch, warm conversational
+                const samVoice =
+                    availableVoices.find(v => isFemaleVoice(v) && v.lang.includes('en')) ||
+                    availableVoices.find(v => v.lang.includes('en-US') && !isMaleVoice(v)) ||
+                    availableVoices.find(v => v.lang.includes('en') && v !== availableVoices[0]) ||
+                    availableVoices[1] || availableVoices[0];
+
                 utterance.voice = samVoice;
-                utterance.pitch = 0.9;
-                utterance.rate = 0.95;
+                utterance.pitch = 1.05; // Slightly higher but natural (was 1.2 - too robotic)
+                utterance.rate = 0.88;  // Slightly slower for explanations
+                utterance.volume = 1.0;
+                console.log('[Podcast] Sam voice:', samVoice?.name);
             }
 
             utteranceRef.current = utterance;
 
-            // Handle End of Line
+            // Handle End of Line - USE REF to avoid stale closure
             utterance.onend = () => {
                 setIsLoadingAudio(false);
-                // Check if we are still "playing" (user didn't pause)
-                if (isPlaying) {
+                // Check if we are still "playing" (user didn't pause) - USE REF!
+                if (isPlayingRef.current) {
                     speakLine(index + 1);
                 }
             };
