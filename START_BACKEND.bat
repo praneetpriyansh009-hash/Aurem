@@ -14,4 +14,4 @@ echo.
 echo Starting backend server...
 echo.
 cd server
-node minimal_server.js
+node index.js

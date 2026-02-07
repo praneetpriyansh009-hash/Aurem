@@ -32,7 +32,11 @@ export const retryableFetch = async (url, options = {}, retries = 3) => {
 
         // If response has an error, return it so caller can handle
         if (!response.ok) {
-            return { error: data.error || data.message || `HTTP ${response.status}` };
+            // Return full error object plus status, preserving 'details' and 'message'
+            return {
+                ...data,
+                error: data.error || data.message || `HTTP ${response.status}`
+            };
         }
 
         return data;

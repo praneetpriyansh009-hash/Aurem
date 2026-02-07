@@ -35,18 +35,28 @@ app.get('/', (req, res) => {
 
 // Primary Groq Route
 app.post('/api/ai/groq', async (req, res) => {
-    await handleGroqRequest(req, res);
-});
+    let { messages, model } = req.body;
 
-// Legacy Gemini Route -> Redirects to Groq
-app.post('/api/ai/gemini', async (req, res) => {
-    console.log("[Legacy Gemini Endpoint] Redirecting request to Groq...");
-    await handleGroqRequest(req, res);
-});
+    // DETECT VISION
+    const hasImages = messages?.some(m => Array.isArray(m.content));
 
-async function handleGroqRequest(req, res) {
+    // Choose correct model
+    const selectedModel = hasImages ? "llama-3.2-11b-vision-preview" : (model || GROQ_MODEL);
+
+    // ENSURE Content is string for Text Models
+    if (!hasImages) {
+        messages = messages.map(m => ({
+            ...m,
+            content: Array.isArray(m.content)
+                ? m.content.map(c => c.text || JSON.stringify(c)).join('\n')
+                : m.content
+        }));
+    }
+
     try {
         if (!GROQ_API_KEY) throw new Error("Missing Groq Key");
+
+        console.log(`[Groq] Mode: ${hasImages ? 'VISION' : 'TEXT'} | Model: ${selectedModel}`);
 
         const response = await fetch(GROQ_URL, {
             method: 'POST',
@@ -55,8 +65,8 @@ async function handleGroqRequest(req, res) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: req.body.model || GROQ_MODEL,
-                messages: req.body.messages || []
+                model: selectedModel,
+                messages: messages
             })
         });
 
@@ -73,7 +83,7 @@ async function handleGroqRequest(req, res) {
         console.error("[Groq] Error:", error.message);
         res.status(500).json({ error: error.message, details: "Check server logs" });
     }
-}
+});
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Groq Server running on http://localhost:${PORT}`);

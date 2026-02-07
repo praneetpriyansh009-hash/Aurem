@@ -42,17 +42,17 @@ const PodcastGenerator = () => {
     const [isPlaybackFinished, setIsPlaybackFinished] = useState(false);
 
     const fileInputRef = useRef(null);
-    // Removed synthRef/utteranceRef
+    // Using browser SpeechSynthesis now
 
     // --- Cleanup on Unmount ---
     useEffect(() => {
         return () => {
-            if (audioRef.current) {
-                audioRef.current.pause();
-                audioRef.current = null;
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
             }
         };
     }, []);
+
 
     // --- File Handling ---
     const extractPdfTextPreview = async (arrayBuffer) => {
@@ -143,15 +143,15 @@ const PodcastGenerator = () => {
         }
     };
 
-    // --- Audio Playback (Server-Side TTS) ---
-    const audioRef = useRef(null);
+    // --- Audio Playback (Browser SpeechSynthesis - Free & Reliable) ---
+    const synthRef = useRef(window.speechSynthesis);
+    const utteranceRef = useRef(null);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
 
     const speakLine = async (index) => {
-        // Stop any current audio
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current = null;
+        // Stop any current speech
+        if (synthRef.current.speaking) {
+            synthRef.current.cancel();
         }
 
         if (index >= podcastScript.length) {
@@ -162,32 +162,35 @@ const PodcastGenerator = () => {
 
         // Set current line immediately for UI
         setCurrentLineIndex(index);
-
-        // If we were paused and just resuming, we need to know if we are "in the middle". 
-        // But for simplicity in this version, we'll just restart the current line or fetch it.
-        // Ideally we cache these, but let's fetch for now.
-
         setIsLoadingAudio(true);
+
         try {
-            // 1. Fetch Audio
             const line = podcastScript[index];
-            const response = await retryableFetch('/api/ai/tts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    text: line.text,
-                    speaker: line.speaker
-                })
-            });
+            const utterance = new SpeechSynthesisUtterance(line.text);
 
-            if (response.error) throw new Error(response.error);
+            // Different voices for Alex and Sam
+            const voices = synthRef.current.getVoices();
+            if (line.speaker === 'Alex') {
+                // Try to get a British voice for Alex
+                const alexVoice = voices.find(v => v.lang.includes('en-GB')) ||
+                    voices.find(v => v.lang.includes('en')) || voices[0];
+                utterance.voice = alexVoice;
+                utterance.pitch = 1.1;
+                utterance.rate = 1.0;
+            } else {
+                // Different voice for Sam
+                const samVoice = voices.find(v => v.lang.includes('en-US') && v.name !== voices[0]?.name) ||
+                    voices.find(v => v.lang.includes('en')) || voices[1] || voices[0];
+                utterance.voice = samVoice;
+                utterance.pitch = 0.9;
+                utterance.rate = 0.95;
+            }
 
-            // 2. Play Audio
-            const audio = new Audio(response.audioData);
-            audioRef.current = audio;
+            utteranceRef.current = utterance;
 
             // Handle End of Line
-            audio.onended = () => {
+            utterance.onend = () => {
+                setIsLoadingAudio(false);
                 // Check if we are still "playing" (user didn't pause)
                 if (isPlaying) {
                     speakLine(index + 1);
@@ -195,33 +198,34 @@ const PodcastGenerator = () => {
             };
 
             // Handle Errors
-            audio.onerror = (e) => {
-                console.error("Audio playback error", e);
+            utterance.onerror = (e) => {
+                console.error("Speech error", e);
                 setIsLoadingAudio(false);
                 setIsPlaying(false);
             };
 
-            // Start
-            await audio.play();
-            setIsLoadingAudio(false);
+            utterance.onstart = () => {
+                setIsLoadingAudio(false);
+            };
+
+            // Start speaking
+            synthRef.current.speak(utterance);
 
         } catch (error) {
             console.error("TTS Error:", error);
             setIsLoadingAudio(false);
             setIsPlaying(false);
-            alert("Failed to play audio segment. Please check connection.");
+            alert("Speech synthesis not supported in this browser.");
         }
     };
+
 
     const togglePlayback = () => {
         if (isPlaying) {
             // PAUSE ACTION
             setIsPlaying(false);
-            if (audioRef.current) {
-                audioRef.current.pause();
-                // We don't nullify it so we *could* resume, 
-                // but our simple logic above restarts the line.
-                // To allow resume: audioRef.current.pause();
+            if (synthRef.current.speaking) {
+                synthRef.current.pause();
             }
         } else {
             // PLAY ACTION
@@ -229,11 +233,8 @@ const PodcastGenerator = () => {
             setIsPlaybackFinished(false);
 
             // Resume or Start
-            if (audioRef.current && audioRef.current.paused && audioRef.current.src) {
-                audioRef.current.play().catch(e => {
-                    // If resume fails (e.g. url expired or something), restart line
-                    speakLine(currentLineIndex === -1 ? 0 : currentLineIndex);
-                });
+            if (synthRef.current.paused) {
+                synthRef.current.resume();
             } else {
                 speakLine(currentLineIndex === -1 ? 0 : currentLineIndex);
             }
@@ -241,14 +242,14 @@ const PodcastGenerator = () => {
     };
 
     const stopPlayback = () => {
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current = null;
+        if (synthRef.current.speaking) {
+            synthRef.current.cancel();
         }
         setIsPlaying(false);
         setCurrentLineIndex(-1);
         setIsLoadingAudio(false);
     };
+
 
     return (
         <div className={`h-full ${isDark ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'} font-sans transition-colors duration-300 overflow-y-auto custom-scrollbar`}>

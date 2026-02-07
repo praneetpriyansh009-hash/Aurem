@@ -125,7 +125,7 @@ const AppContent = () => {
                 ${currentUser ? 'md:my-[2vh] md:mr-[2vh] md:rounded-3xl md:border md:border-white/10 md:shadow-2xl overflow-hidden md:glass-panel' : ''}
             `}>
                 {currentUser && (
-                    <header className="md:hidden glass-panel p-4 shadow-xl flex items-center z-30 sticky top-0 border-b border-white/5">
+                    <header className="md:hidden glass-panel p-4 pt-12 shadow-xl flex items-center z-30 sticky top-0 border-b border-white/5">
                         <button onClick={() => setIsSidebarOpen(true)} className="mr-3 text-theme-muted hover:text-theme-primary">
                             <Menu className="w-5 h-5" />
                         </button>

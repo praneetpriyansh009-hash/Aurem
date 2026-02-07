@@ -106,6 +106,24 @@ app.post('/api/ai/groq', async (req, res) => {
     try {
         if (!GROQ_API_KEY) throw new Error("Missing Groq Key");
 
+        let { messages, model } = req.body;
+        const hasImages = messages?.some(m => Array.isArray(m.content));
+
+        // Choose correct model
+        const selectedModel = hasImages ? "llama-3.2-11b-vision-preview" : (model || "llama-3.1-8b-instant");
+
+        // ENSURE Content is string for Text Models
+        if (!hasImages) {
+            messages = messages.map(m => ({
+                ...m,
+                content: Array.isArray(m.content)
+                    ? m.content.map(c => c.text || JSON.stringify(c)).join('\n')
+                    : m.content
+            }));
+        }
+
+        console.log(`[Groq] Mode: ${hasImages ? 'VISION' : 'TEXT'} | Model: ${selectedModel}`);
+
         // Standard Headers for Groq
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: 'POST',
@@ -114,8 +132,8 @@ app.post('/api/ai/groq', async (req, res) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: "llama-3.1-8b-instant",
-                messages: req.body.messages || [],
+                model: selectedModel,
+                messages: messages,
                 temperature: 0.7
             })
         });

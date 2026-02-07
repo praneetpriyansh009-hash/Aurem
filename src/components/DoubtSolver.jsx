@@ -134,20 +134,21 @@ const DoubtSolver = ({ retryableFetch }) => {
 
             // Vision Request (Llama 4 Scout - current supported vision model)
             if (imageToSend) {
-                payload = {
-                    model: "meta-llama/llama-4-scout-17b-16e-instruct",
-                    messages: [
-                        {
-                            role: "user",
-                            content: [
-                                { type: "text", text: `${systemPrompt}\n\nUSER QUESTION: ${userQuestion || "Analyze this image."}` },
-                                { type: "image_url", image_url: { url: imagePreviewToSend } }
-                            ]
-                        }
-                    ],
-                    temperature: 0.5,
-                    max_tokens: 1024
-                };
+                if (imageToSend) {
+                    payload = {
+                        messages: [
+                            {
+                                role: "user",
+                                content: [
+                                    { type: "text", text: `${systemPrompt}\n\nUSER QUESTION: ${userQuestion || "Analyze this image."}` },
+                                    { type: "image_url", image_url: { url: imagePreviewToSend } }
+                                ]
+                            }
+                        ],
+                        temperature: 0.5,
+                        max_tokens: 1024
+                    };
+                }
             }
             // Text Request (Llama 3.3 70B)
             else {
@@ -174,8 +175,9 @@ const DoubtSolver = ({ retryableFetch }) => {
             });
 
             if (result.error) {
-                const detailedMsg = result.message ? `${result.error}: ${result.message}` :
-                    (typeof result.error === 'string' ? result.error : JSON.stringify(result.error));
+                const detailedMsg = result.details
+                    ? `${result.error}: ${result.message} (${result.details})`
+                    : (result.message ? `${result.error}: ${result.message}` : JSON.stringify(result.error));
                 throw new Error(detailedMsg);
             }
 

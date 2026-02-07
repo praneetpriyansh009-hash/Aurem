@@ -11,7 +11,7 @@ echo.
 
 echo [2] Starting BACKEND ONLY (Port 5000)...
 echo (Your frontend is likely already running)
-start "Atlas Backend (Groq)" /D server cmd /k "node groq_server.js"
+start "Atlas Backend (Full)" /D server cmd /k "node index.js"
 echo Backend launched on Port 5050.
 echo.
 echo Please reload your browser page now.

@@ -12,7 +12,7 @@ import rateLimit from 'express-rate-limit';
 console.log('[Startup] Importing routes...');
 import authRoutes from './routes/auth.js';
 import aiRoutes from './routes/ai.js';
-// import ttsRoutes from './routes/tts.js';
+import ttsRoutes from './routes/tts.js';
 console.log('[Startup] Routes imported.');
 
 const __filename = fileURLToPath(import.meta.url);
@@ -65,7 +65,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
-// app.use('/api/ai', ttsRoutes);
+app.use('/api/ai', ttsRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

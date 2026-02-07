@@ -1,32 +1,50 @@
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const API_KEY = "AIzaSyBUlCibyB-ut3kOYNHBI1OrdmaUjBEuL_o";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '.env') });
 
-async function listModels() {
-    console.log("Listing Gemini Models...");
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+async function listGroqModels() {
+    console.log("\n--- GROQ MODELS ---");
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`);
-        const data = await response.json();
-
-        if (data.error) {
-            console.error("Error:", data.error);
-            return;
-        }
-
-        console.log("Available Models:");
-        if (data.models) {
-            data.models.forEach(m => {
-                if (m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent")) {
-                    console.log(`- ${m.name}`);
-                }
-            });
+        const res = await fetch("https://api.groq.com/openai/v1/models", {
+            headers: { "Authorization": `Bearer ${GROQ_API_KEY}` }
+        });
+        const data = await res.json();
+        if (data.data) {
+            data.data.forEach(m => console.log(m.id));
         } else {
-            console.log("No models found?", data);
+            console.error("No data:", data);
         }
-
     } catch (e) {
-        console.error("Exception:", e.message);
+        console.error("Groq Error:", e.message);
     }
 }
 
-listModels();
+async function listGeminiModels() {
+    console.log("\n--- GEMINI MODELS ---");
+    try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`);
+        const data = await res.json();
+        if (data.models) {
+            data.models.forEach(m => console.log(m.name));
+        } else {
+            console.error("No data:", data);
+        }
+    } catch (e) {
+        console.error("Gemini Error:", e.message);
+    }
+}
+
+async function main() {
+    await listGroqModels();
+    await listGeminiModels();
+}
+
+main();

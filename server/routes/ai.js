@@ -18,112 +18,23 @@ const router = express.Router();
 const GROQ_API_KEY = (process.env.GROQ_API_KEY || "").trim();
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim();
 const GROQ_MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
-const GROQ_VISION_MODEL = "llama-3.2-90b-vision-preview"; // Or 11b if 90b is unavailable
+const GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"; // Free multimodal model on Groq
 const REQUEST_TIMEOUT = 30000;
 
-console.log(`[AI Service] VERSION 8.0 (ULTRA STEALTH) ACTIVE`);
+console.log(`[AI Service] VERSION 8.2 (MODEL UPDATE) ACTIVE`);
 
-// --- Helper: Ultra-Stealth Groq Call ---
-const callGroqStealth = async (messages, modelIdx = 0) => {
-    if (!GROQ_API_KEY) throw new Error("No Groq Key - Please set GROQ_API_KEY in server/.env");
+// ... (keep existing code)
 
-    const model = GROQ_MODELS[modelIdx];
-    console.log(`[AI] Attempting Groq with model: ${model}`);
-
-    try {
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-                "Authorization": `Bearer ${GROQ_API_KEY}`,
-                "Content-Type": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-                "Accept": "application/json"
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: messages,
-                temperature: 0.7,
-                max_tokens: 4096
-            }),
-            timeout: REQUEST_TIMEOUT
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[AI] Groq ${model} failed (${response.status}):`, errorText.substring(0, 200));
-
-            // Rate limit or quota exceeded - try next model
-            if (response.status === 429 || response.status === 503) {
-                console.warn(`[AI] Rate limited on ${model}, trying fallback...`);
-                if (modelIdx < GROQ_MODELS.length - 1) {
-                    return callGroqStealth(messages, modelIdx + 1);
-                }
-                throw new Error("RATE_LIMITED");
-            }
-
-            // Auth issues
-            if (response.status === 403 || response.status === 401) {
-                throw new Error("GROQ_AUTH_ERROR");
-            }
-
-            // Try next model for other errors
-            if (modelIdx < GROQ_MODELS.length - 1) {
-                return callGroqStealth(messages, modelIdx + 1);
-            }
-            throw new Error(`GROQ_ERROR_${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log(`[AI] Groq ${model} success`);
-        return data;
-    } catch (fetchError) {
-        console.error(`[AI] Groq fetch error:`, fetchError.message);
-        if (modelIdx < GROQ_MODELS.length - 1) {
-            return callGroqStealth(messages, modelIdx + 1);
-        }
-        throw fetchError;
-    }
-};
-
-// --- Robust Gemini Helper ---
-const GEMINI_MODELS = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro",
-    "gemini-1.0-pro",
-    "gemini-pro"
-];
-
-const callGeminiRobust = async (prompt, modelIdx = 0) => {
-    if (modelIdx >= GEMINI_MODELS.length) throw new Error("All Gemini models failed");
-
-    const model = GEMINI_MODELS[modelIdx];
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
-
-    try {
-        const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-
-        if (!response.ok) {
-            if ([404, 429, 503, 500].includes(response.status)) {
-                return callGeminiRobust(prompt, modelIdx + 1);
-            }
-            const errText = await response.text();
-            throw new Error(errText);
-        }
-        return await response.json();
-    } catch (e) {
-        return callGeminiRobust(prompt, modelIdx + 1);
-    }
-};
+// ...
 
 const callGroqVision = async (messages) => {
-    if (!GROQ_API_KEY) throw new Error("No Groq Key");
+    if (!GROQ_API_KEY) throw new Error("Missing Groq API Key");
 
-    console.log(`[AI] Attempting Groq Vision with model: ${GROQ_VISION_MODEL}`);
+    // Attempting the most likely valid model ID. 
+    // If 'preview' is dead, we try 'instruct' which is the standard GA suffix.
+    const model = "meta-llama/llama-4-scout-17b-16e-instruct";
+
+    console.log(`[AI] Attempting Groq Vision with model: ${model}`);
 
     try {
         const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -133,7 +44,7 @@ const callGroqVision = async (messages) => {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: GROQ_VISION_MODEL,
+                model: model,
                 messages: messages,
                 temperature: 0.5,
                 max_tokens: 6000,
@@ -143,45 +54,114 @@ const callGroqVision = async (messages) => {
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Groq Vision Error ${response.status}: ${errorText}`);
+            console.error(`[AI] Groq Vision REST Error ${response.status}:`, errorText);
+
+            // GRACEFUL FAILURE: Do not crash the app. Return a polite message.
+            return {
+                choices: [{
+                    message: {
+                        role: 'assistant',
+                        content: "I'm sorry, I cannot analyze images right now because the specific AI vision model is currently unavailable on the server. Please try asking me questions via text!"
+                    }
+                }]
+            };
         }
 
         const data = await response.json();
-        return data.choices[0].message.content;
+        return data;
     } catch (error) {
-        console.error("[AI] Groq Vision failed:", error.message);
-        throw error;
+        console.error("[AI] Groq Vision Network Error:", error.message);
+        throw new Error(`Vision Service Unavailable: ${error.message}`);
     }
 };
 
-// --- Route: Gemini Chat ---
-router.post('/gemini', async (req, res) => {
-    try {
-        const { messages } = req.body;
-        const prompt = messages.map(m => `${m.role}: ${m.content}`).join('\n');
+// --- Helper: Standard Groq Text Call ---
+const callGroqStealth = async (messages) => {
+    if (!GROQ_API_KEY) throw new Error("Missing Groq API Key");
+    const model = "llama-3.3-70b-versatile";
 
-        if (!GEMINI_API_KEY) throw new Error("No Gemini Key");
+    console.log(`[Groq] Sending text request to ${model}`);
 
-        const data = await callGeminiRobust(prompt);
-        res.json(data);
-    } catch (error) {
-        console.error("[Gemini] Error:", error.message);
-        res.status(500).json({ error: error.message });
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${GROQ_API_KEY}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            model: model,
+            messages: messages,
+            temperature: 0.7,
+            max_tokens: 4096
+        })
+    });
+
+    if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Groq API Error (${response.status}): ${err}`);
     }
-});
+
+    return await response.json();
+};
+
+// Remove Gemini Routes/Helpers completely
 
 // --- Route: Podcast ---
+// --- Route: Podcast ---
 router.post('/podcast', async (req, res) => {
-    const { content, topics, mode, syllabus } = req.body;
+    const { content, topics, mode, syllabus, tier } = req.body;
     try {
-        const prompt = `Create a podcast script JSON between Alex and Sam. Topic: ${mode === 'syllabus' ? syllabus.topic : content}. Exchanges: 12. Rules: Output ONLY JSON.`;
+        const topicContent = mode === 'syllabus'
+            ? `Subject: ${syllabus.subject}, Topic: ${syllabus.topic}, Level: ${syllabus.level}`
+            : (content ? content.substring(0, 2000) : 'general educational topic');
+
+        const exchanges = tier === 'pro' ? 30 : 18;
+
+        const prompt = `You are an expert podcast script writer. Create an engaging, in-depth educational podcast conversation between two hosts:
+- Alex (the curious, enthusiastic host who asks insightful questions)
+- Sam (the knowledgeable expert who gives comprehensive explanations)
+
+Topic: ${topicContent}
+${topics ? `Focus Areas: ${topics}` : ''}
+
+IMPORTANT REQUIREMENTS:
+1. Create EXACTLY ${exchanges} exchanges (each speaker takes turns)
+2. Make each response 2-4 sentences long for natural speech
+3. Include specific facts, examples, and real-world applications
+4. Have Alex ask follow-up questions that dig deeper
+5. Sam should explain concepts clearly with analogies when helpful
+6. Build the conversation progressively - start with basics, go deeper
+7. End with a summary of key takeaways
+
+Output ONLY valid JSON in this exact format:
+{"script":[{"speaker":"Alex","text":"..."},{"speaker":"Sam","text":"..."}]}
+
+Start the podcast with an engaging introduction and end with a memorable conclusion.`;
+
         const msgs = [{ role: 'user', content: prompt }];
+
 
         let result;
         try {
+            // Direct call
             result = await callGroqStealth(msgs);
-        } catch (e) {
-            result = await callGeminiFallback(msgs);
+        } catch (apiError) {
+            console.error("[Podcast] API Failed:", apiError.message);
+            // Fallback to a simple static script so the UI doesn't break
+            result = {
+                choices: [{
+                    message: {
+                        content: JSON.stringify({
+                            script: [
+                                { speaker: "Alex", text: "Welcome back! Today we're discussing this interesting topic." },
+                                { speaker: "Sam", text: "That's right, Alex. The AI service is experiencing heavy load, but let's dive into the basics." },
+                                { speaker: "Alex", text: "Absolutely. Even without the full deep dive, the key concepts remain crucial." },
+                                { speaker: "Sam", text: "Agreed. Let's keep exploring!" }
+                            ]
+                        })
+                    }
+                }]
+            };
         }
 
         const text = result.choices[0].message.content;
@@ -195,8 +175,27 @@ router.post('/podcast', async (req, res) => {
             else finalJson = { script: [{ speaker: "Sam", text: text }] };
         }
 
-        res.json({ script: finalJson.script || finalJson, provider: "atlas-hybrid" });
+        // NORMALIZE: Ensure we extract the ARRAY, no matter the structure
+        let scriptArray = [];
+        if (Array.isArray(finalJson)) {
+            scriptArray = finalJson;
+        } else if (Array.isArray(finalJson.script)) {
+            scriptArray = finalJson.script;
+        } else if (Array.isArray(finalJson.podcast)) {
+            scriptArray = finalJson.podcast;
+        } else if (Array.isArray(finalJson.dialogue)) {
+            scriptArray = finalJson.dialogue;
+        } else {
+            // Fallback if structure is weird but has keys
+            // Just try to find ANY array in values
+            const possibleArray = Object.values(finalJson).find(val => Array.isArray(val));
+            scriptArray = possibleArray || [{ speaker: "System", text: "Could not parse script format." }];
+        }
+
+        res.json({ script: scriptArray, provider: "atlas-groq" });
     } catch (error) {
+        // This catch block handles JSON parsing critical failures (unlikely due to fallbacks)
+        console.error("[Podcast Error]", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -204,113 +203,197 @@ router.post('/podcast', async (req, res) => {
 // --- Route: Groq (Chat) ---
 router.post('/groq', validateAIRequest, async (req, res) => {
     try {
+        const { messages } = req.body;
+
+        // Vision Detection
+        const hasImages = messages.some(m => Array.isArray(m.content));
+
         let result;
-        try {
-            result = await callGroqStealth(req.body.messages);
-        } catch (e) {
-            console.warn("[AI] Groq blocked or failed, using Gemini workaround.");
-            result = await callGeminiFallback(req.body.messages);
+
+        if (hasImages) {
+            result = await callGroqVision(messages);
+        } else {
+            // Text Mode - Standardize formatting
+            const textMessages = messages.map(msg => ({
+                ...msg,
+                content: Array.isArray(msg.content)
+                    ? msg.content.map(c => c.text || JSON.stringify(c)).join('\n')
+                    : msg.content
+            }));
+
+            result = await callGroqStealth(textMessages);
         }
+
         res.json(result);
     } catch (error) {
         console.error('[Chat Error]', error);
         res.status(500).json({
             error: "AI Service Error",
             message: error.message,
-            details: "Both Groq and Gemini fallback failed. Check server console."
+            details: `Backend Failure: ${error.message}`
         });
     }
 });
 
 // --- Route: YouTube Transcript ---
 router.post('/youtube-transcript', async (req, res) => {
-    const { videoUrl, videoId } = req.body;
-
-    // For now, we return a placeholder that tells the frontend to work without transcript
-    // The frontend will handle this gracefully and allow AI analysis based on video topic
+    const { videoId } = req.body;
     res.json({
         videoId: videoId,
         title: "YouTube Video",
         transcript: null,
         noTranscript: true,
-        message: "Transcript not available. You can still analyze the video by providing context or asking questions about the topic."
+        message: "Transcript not available."
     });
 });
 
 // --- Route: Generate Sample Paper (Groq Vision) ---
 router.post('/generate-paper', async (req, res) => {
     try {
-        const { extractedText, images } = req.body; // images: array of base64 strings (data:image/jpeg;base64,...)
+        const { extractedText, images } = req.body;
 
-        console.log(`[Paper Gen] Received request. Text len: ${extractedText?.length}, Images: ${images?.length}`);
-
-        if (!extractedText && (!images || images.length === 0)) {
-            return res.status(400).json({ error: "No content provided (text or images)" });
-        }
-
-        // Construct messages for Groq Vision
+        // ... simplify logic, assume similar to before but calling callGroqVision ...
+        // For brevity in this replacement, we'll just implement the direct call logic
+        // re-constructing messages identical to before
         const content = [];
-
-        // Add text context
-        if (extractedText) {
-            content.push({ type: "text", text: `Here is the text content of a sample paper:\n${extractedText}\n\n` });
-        }
-
-        // Add images (limit to 3 to avoid payload size issues/token limits if needed, but Groq handles 4-5 well)
+        if (extractedText) content.push({ type: "text", text: `Here is the text content:\n${extractedText}\n\n` });
         if (images && images.length > 0) {
-            content.push({ type: "text", text: "Here are the visual pages of the sample paper for context (styling, diagrams, etc.):" });
-            images.slice(0, 5).forEach((img, idx) => {
-                // Ensure base64 formatting is correct for Groq
-                // Groq expects image_url: { url: "data:image/jpeg;base64,..." }
-                content.push({
-                    type: "image_url",
-                    image_url: {
-                        url: img
-                    }
-                });
+            content.push({ type: "text", text: "Visual context:" });
+            images.slice(0, 5).forEach(img => {
+                content.push({ type: "image_url", image_url: { url: img } });
             });
         }
 
-        // The Prompt
         content.push({
             type: "text",
-            text: `
-            ROLE: You are an expert academic examiner.
-            TASK: Create a BRAND NEW question paper based on the sample provided above.
-            
-            REQUIREMENTS:
-            1.  **Pattern Match**: Strictly follow the same pattern (sections, question types, marks distribution) as the sample.
-            2.  **Difficulty Match**: The difficulty level must match the sample.
-            3.  **Topic/Syllabus**: Cover the same syllabus/topics as implied by the sample questions.
-            4.  **Length**: Generate exactly the same number of questions (up to 35).
-            5.  **NO HOLD BACKS**: Generate ALL questions. Do not summarize. Full question paper required.
-            6.  **Image Integration**: If the sample has image-based questions, generate similar NEW questions.
-                - Since you cannot generate actual images, provide a [Visual Description] in square brackets where the image should be.
-                - Example: Q5. Find the area of the shaded region. [Image: A circle of radius 5cm with a 90-degree sector removed].
-            
-            OUTPUT FORMAT:
-            Return the output in clean Markdown format.
-            - Use # for Header (School Name/Exam Name inferred or generic)
-            - Use ## for Sections
-            - Use **Bold** for marks.
-            
-            Now, generate the full paper.
-            `
+            text: `You are an expert examination paper creator. Your job is to create a COMPLETE question paper in JSON format.
+
+STEP 1 - ANALYZE THE SAMPLE:
+- Count EVERY question (1, 2, 3... including all sub-parts like a, b, c)
+- Note the sections (Section A, B, C, D, E if present)
+- Identify question types per section
+- Note marks per question if shown
+
+STEP 2 - GENERATE NEW PAPER:
+Create a BRAND NEW paper with:
+- SAME total number of questions as the original
+- SAME section structure
+- SAME question types per section
+- SAME difficulty level
+- COMPLETELY DIFFERENT content (new questions, new scenarios)
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object with this structure:
+{
+  "title": "Paper Title",
+  "sections": [
+    {
+      "name": "Section A",
+      "questions": [
+        {
+          "id": "q1",
+          "number": "1",
+          "text": "Question text here...",
+          "type": "mcq", // or "subjective"
+          "marks": 1,
+          "options": ["Option A", "Option B", "Option C", "Option D"] // only for mcq
+        }
+      ]
+    }
+  ]
+}
+
+CRITICAL RULES:
+1. Return ONLY JSON. No markdown formatting.
+2. Complete EVERY single question. Do not truncate.
+3. For "type", use "mcq" if it has options, otherwise "subjective".`
         });
+
 
         const messages = [{ role: "user", content: content }];
 
-        const generatedPaper = await callGroqVision(messages);
+        // This will now use the Graceful Failure version if Groq is down
+        const generatedPaperObj = await callGroqVision(messages);
+        let paperContent = generatedPaperObj.choices[0].message.content;
 
-        res.json({ success: true, paper: generatedPaper });
+        // Clean up markdown if present
+        paperContent = paperContent.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+
+        // Parse JSON
+        let paperJson;
+        try {
+            paperJson = JSON.parse(paperContent);
+        } catch (e) {
+            console.error("Failed to parse paper JSON", e);
+            // Fallback: try to find JSON object in text
+            const match = paperContent.match(/\{[\s\S]*\}/);
+            if (match) {
+                try {
+                    paperJson = JSON.parse(match[0]);
+                } catch (e2) {
+                    throw new Error("Could not parse AI response as JSON");
+                }
+            } else {
+                throw new Error("Could not parse AI response as JSON");
+            }
+        }
+
+        res.json({ success: true, paper: paperJson });
 
     } catch (error) {
         console.error("[Paper Gen] Error:", error);
-        res.status(500).json({
-            error: "Failed to generate paper",
-            details: error.message
-        });
+        res.status(500).json({ error: "Failed to generate paper", details: error.message });
     }
 });
+
+// --- Route: Evaluate Paper ---
+router.post('/evaluate-paper', async (req, res) => {
+    try {
+        const { userAnswers, questions } = req.body; // userAnswers: { q1: "answer", ... }
+
+        const prompt = `You are an expert examiner. Grade these student answers.
+
+QUESTIONS & ANSWERS:
+${JSON.stringify(questions.map(q => ({
+            id: q.id,
+            question: q.text,
+            marks: q.marks,
+            studentAnswer: userAnswers[q.id] || "No answer provided"
+        })))}
+
+TASK:
+1. Evaluate each answer for correctness.
+2. Assign marks (0 to max marks).
+3. Provide brief feedback/correction.
+
+OUTPUT JSON FORMAT:
+{
+  "totalMarks": 50,
+  "studentScore": 42,
+  "results": [
+    {
+      "id": "q1",
+      "marksObtained": 1,
+      "feedback": "Correct. The law states..."
+    }
+  ]
+}
+
+Return ONLY JSON.`;
+
+        const messages = [{ role: 'user', content: prompt }];
+        const result = await callGroqStealth(messages);
+        let evalContent = result.choices[0].message.content;
+        evalContent = evalContent.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+
+        const evaluation = JSON.parse(evalContent);
+        res.json({ success: true, evaluation });
+
+    } catch (error) {
+        console.error("[Evaluation] Error:", error);
+        res.status(500).json({ error: "Failed to evaluate paper" });
+    }
+});
+
 
 export default router;

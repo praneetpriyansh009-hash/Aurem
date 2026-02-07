@@ -1,19 +1,24 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Loader2, AlertCircle, FileCheck, CheckCircle2, Download } from 'lucide-react';
+import { Upload, FileText, Loader2, AlertCircle, CheckCircle2, Download, Play, Trophy, ArrowRight, Save, RotateCcw } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { API_BASE_URL } from '../utils/api';
 
 // Use the worker from the npm package directly if possible, or a specific version from CDN that matches.
-// Vite sometimes struggles with this, so we use the unpkg URL which is more reliable for valid ESM.
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 const SamplePaperGenerator = ({ retryableFetch }) => {
     const [file, setFile] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [loadingStep, setLoadingStep] = useState(''); // 'parsing', 'analyzing', 'generating'
-    const [generatedPaper, setGeneratedPaper] = useState(null);
     const [error, setError] = useState(null);
+
+    // Interactive State
+    const [paperData, setPaperData] = useState(null); // The parsed JSON paper
+    const [mode, setMode] = useState('upload'); // 'upload', 'attempt', 'result'
+    const [answers, setAnswers] = useState({}); // { qId: "user answer" }
+    const [evaluation, setEvaluation] = useState(null); // AI grading result
+
     const fileInputRef = useRef(null);
 
     const handleFileChange = (e) => {
@@ -21,7 +26,8 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
         if (selectedFile) {
             setFile(selectedFile);
             setError(null);
-            setGeneratedPaper(null);
+            setPaperData(null);
+            setMode('upload');
         }
     };
 
@@ -50,14 +56,8 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
             images.push(canvas.toDataURL('image/jpeg', 0.8));
         }
 
-        // Extract text from remaining pages if any
         if (pdf.numPages > 5) {
-            for (let i = 6; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(' ');
-                extractedText += `--- Page ${i} ---\n${pageText}\n\n`;
-            }
+            extractedText += `... (Remaining pages truncacted for performance)`;
         }
 
         return { images, extractedText };
@@ -82,7 +82,6 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
                 extractedText = result.extractedText;
                 images = result.images;
             } else if (file.type.startsWith('image/')) {
-                // For direct image upload, convert to base64
                 const reader = new FileReader();
                 const base64Promise = new Promise((resolve) => {
                     reader.onload = (e) => resolve(e.target.result);
@@ -96,7 +95,7 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
             }
 
             // 2. Call AI
-            setLoadingStep('AI analyzing structure & generating new paper...');
+            setLoadingStep('AI designing new paper (this may take a minute)...');
 
             const data = await retryableFetch(`${API_BASE_URL}/ai/generate-paper`, {
                 method: 'POST',
@@ -104,12 +103,20 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
                 body: JSON.stringify({ extractedText, images })
             });
 
-            // retryableFetch returns parsed JSON directly or throws on error
-            if (data.error) {
-                throw new Error(data.error || 'Failed to generate paper');
-            }
+            if (data.error) throw new Error(data.error || 'Failed to generate paper');
+            if (!data.paper || !data.paper.sections) throw new Error('Invalid paper format received from AI');
 
-            setGeneratedPaper(data.paper);
+            setPaperData(data.paper);
+            setMode('attempt');
+
+            // Initialize empty answers
+            const initialAnswers = {};
+            data.paper.sections.forEach(section => {
+                section.questions.forEach(q => {
+                    initialAnswers[q.id] = "";
+                });
+            });
+            setAnswers(initialAnswers);
 
         } catch (err) {
             console.error("Generator Error:", err);
@@ -120,9 +127,63 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
         }
     };
 
-    const downloadPaper = () => {
-        if (!generatedPaper) return;
-        const blob = new Blob([generatedPaper], { type: 'text/markdown' });
+    const handleAnswerChange = (qId, value) => {
+        setAnswers(prev => ({ ...prev, [qId]: value }));
+    };
+
+    const handleSubmitPaper = async () => {
+        if (!paperData) return;
+
+        // Confirm submission
+        if (!window.confirm("Are you sure you want to submit your paper for grading?")) return;
+
+        setIsLoading(true);
+        setLoadingStep('AI Examiner is grading your answers...');
+
+        try {
+            // Flatten questions for evaluation
+            const allQuestions = [];
+            paperData.sections.forEach(s => s.questions.forEach(q => allQuestions.push(q)));
+
+            const data = await retryableFetch(`${API_BASE_URL}/ai/evaluate-paper`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userAnswers: answers,
+                    questions: allQuestions
+                })
+            });
+
+            if (data.error) throw new Error(data.error);
+
+            setEvaluation(data.evaluation);
+            setMode('result');
+
+        } catch (err) {
+            console.error("Evaluation Error:", err);
+            setError(err.message || "Failed to submit paper.");
+        } finally {
+            setIsLoading(false);
+            setLoadingStep('');
+        }
+    };
+
+    const downloadPaperMarkdown = () => {
+        if (!paperData) return;
+
+        let md = `# ${paperData.title}\n\n`;
+        paperData.sections.forEach(section => {
+            md += `## ${section.name}\n\n`;
+            section.questions.forEach(q => {
+                md += `**Q${q.number}.** ${q.text} (${q.marks} marks)\n`;
+                if (q.type === 'mcq' && q.options) {
+                    q.options.forEach((opt, idx) => md += `- ${String.fromCharCode(65 + idx)}. ${opt}\n`);
+                }
+                md += `\n`;
+            });
+        });
+
+        const blob = new Blob([md], { type: 'text/markdown' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -132,55 +193,112 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
         document.body.removeChild(a);
     };
 
+    // --- Render Helpers ---
+
+    const renderQuestion = (q, sectionName) => {
+        return (
+            <div key={q.id} className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-4">
+                <div className="flex justify-between items-start mb-3">
+                    <span className="font-bold text-slate-700 dark:text-slate-300">Q{q.number}</span>
+                    <span className="text-xs font-semibold px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-slate-500">{q.marks} Marks</span>
+                </div>
+
+                <p className="text-slate-800 dark:text-slate-200 mb-4 whitespace-pre-wrap">{q.text}</p>
+
+                {q.type === 'mcq' && q.options ? (
+                    <div className="space-y-2">
+                        {q.options.map((option, idx) => (
+                            <label key={idx} className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all
+                                ${answers[q.id] === option
+                                    ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 ring-1 ring-indigo-500'
+                                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}
+                            >
+                                <input
+                                    type="radio"
+                                    name={`q-${q.id}`}
+                                    value={option}
+                                    checked={answers[q.id] === option}
+                                    onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                                    className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span className="ml-3 text-slate-700 dark:text-slate-300">{option}</span>
+                            </label>
+                        ))}
+                    </div>
+                ) : (
+                    <textarea
+                        className="w-full p-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-transparent focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-h-[100px]"
+                        placeholder="Type your answer here..."
+                        value={answers[q.id] || ''}
+                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                    />
+                )}
+            </div>
+        );
+    };
+
+    const renderResultParams = (qId) => {
+        if (!evaluation) return null;
+        const result = evaluation.results.find(r => r.id === qId);
+        if (!result) return null;
+
+        const isFullMarks = result.marksObtained === (paperData.sections.find(s => s.questions.find(q => q.id === qId))?.questions.find(q => q.id === qId)?.marks || 0);
+
+        return (
+            <div className={`mt-4 p-4 rounded-lg text-sm border-l-4 ${result.marksObtained > 0 ? 'bg-green-50 dark:bg-green-900/10 border-green-500' : 'bg-red-50 dark:bg-red-900/10 border-red-500'}`}>
+                <div className="flex justify-between font-bold mb-1">
+                    <span className={result.marksObtained > 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
+                        {result.marksObtained > 0 ? 'Marks Awarded' : 'Needs Improvement'}
+                    </span>
+                    <span>{result.marksObtained} Marks</span>
+                </div>
+                <p className="text-slate-700 dark:text-slate-300">{result.feedback}</p>
+            </div>
+        );
+    };
+
     return (
         <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900/50 p-6 overflow-y-auto">
-            <div className="max-w-4xl mx-auto w-full space-y-8">
+            <div className="max-w-4xl mx-auto w-full space-y-8 pb-20">
 
                 {/* Header */}
                 <div className="text-center space-y-2">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-bold uppercase tracking-wider mb-2 border border-amber-200 dark:border-amber-800">
+                        <AlertCircle className="w-3 h-3" />
+                        Beta Feature • Under Development
+                    </div>
                     <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
-                        Smart Paper Generator
+                        Interactive Paper Generator
                     </h1>
-                    <p className="text-slate-500 dark:text-slate-400">
-                        Upload a sample paper, and AI will generate a brand new one following the same pattern.
+                    <p className="text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
+                        {mode === 'upload' && "Upload a sample to generate a similar interactive test. This feature is experimental and may produce unexpected results."}
+                        {mode === 'attempt' && "Good luck! Attempt the questions below."}
+                        {mode === 'result' && "Analysis complete. Review your performance."}
                     </p>
                 </div>
 
-                {/* Upload Section */}
-                {!generatedPaper && !isLoading && (
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 transition-colors shadow-sm">
+                {/* Upload Mode */}
+                {mode === 'upload' && !isLoading && (
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 transition-colors shadow-sm animate-in fade-in">
                         <div className="flex flex-col items-center justify-center space-y-4">
                             <div className="p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-full">
                                 <Upload className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
                             </div>
                             <div className="text-center">
                                 <p className="text-lg font-medium text-slate-700 dark:text-slate-200">
-                                    {file ? file.name : "Drag & drop or click to upload"}
+                                    {file ? file.name : "Drag & drop original paper (PDF/Image)"}
                                 </p>
-                                <p className="text-sm text-slate-500">Supported formats: PDF, JPG, PNG</p>
                             </div>
 
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleFileChange}
-                                accept=".pdf,image/*"
-                                className="hidden"
-                            />
+                            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf,image/*" className="hidden" />
 
                             <div className="flex space-x-3">
-                                <button
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
-                                >
+                                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors">
                                     {file ? "Change File" : "Select File"}
                                 </button>
                                 {file && (
-                                    <button
-                                        onClick={handleUploadAndGenerate}
-                                        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-md hover:shadow-lg"
-                                    >
-                                        Generate Paper
+                                    <button onClick={handleUploadAndGenerate} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-md">
+                                        Generate & Start Test
                                     </button>
                                 )}
                             </div>
@@ -194,11 +312,11 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
                         <div className="relative">
                             <div className="w-20 h-20 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
                             <div className="absolute inset-0 flex items-center justify-center">
-                                <FileText className="w-8 h-8 text-indigo-600 animate-pulse" />
+                                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
                             </div>
                         </div>
                         <div className="text-center space-y-2">
-                            <h3 className="text-xl font-semibold text-slate-800 dark:text-white">Generating Your Paper</h3>
+                            <h3 className="text-xl font-semibold text-slate-800 dark:text-white">AI Examiner Working</h3>
                             <p className="text-slate-500 dark:text-slate-400">{loadingStep}</p>
                         </div>
                     </div>
@@ -209,50 +327,67 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
                     <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-start space-x-3">
                         <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
                         <div>
-                            <h4 className="font-medium text-red-900 dark:text-red-200">Generation Failed</h4>
+                            <h4 className="font-medium text-red-900 dark:text-red-200">Error Occurred</h4>
                             <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
-                            <button
-                                onClick={() => setError(null)}
-                                className="mt-2 text-sm font-medium text-red-600 hover:text-red-800"
-                            >
-                                Try Again
-                            </button>
                         </div>
                     </div>
                 )}
 
-                {/* Result View */}
-                {generatedPaper && (
-                    <div className="space-y-6 animate-in slide-in-from-bottom-5 duration-500">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2 text-green-600 dark:text-green-400">
-                                <CheckCircle2 className="w-6 h-6" />
-                                <span className="font-semibold text-lg">Paper Generated Successfully!</span>
-                            </div>
-                            <div className="flex space-x-3">
-                                <button
-                                    onClick={() => setGeneratedPaper(null)}
-                                    className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                                >
-                                    Generate Another
+                {/* Attempt & Result Mode */}
+                {(mode === 'attempt' || mode === 'result') && paperData && !isLoading && (
+                    <div className="space-y-8 animate-in slide-in-from-bottom-10">
+                        {/* Paper Title & Actions */}
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                            <h2 className="text-2xl font-bold">{paperData.title}</h2>
+                            <div className="flex gap-2">
+                                <button onClick={downloadPaperMarkdown} className="flex items-center gap-2 px-4 py-2 text-sm border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700">
+                                    <Download className="w-4 h-4" /> Save Markdown
                                 </button>
-                                <button
-                                    onClick={downloadPaper}
-                                    className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md transition-colors"
-                                >
-                                    <Download className="w-4 h-4" />
-                                    <span>Download Markdown</span>
-                                </button>
+                                {mode === 'result' && (
+                                    <button onClick={() => { setMode('upload'); setFile(null); setPaperData(null); }} className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200">
+                                        <RotateCcw className="w-4 h-4" /> New Test
+                                    </button>
+                                )}
                             </div>
                         </div>
 
-                        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                            <div className="p-8 prose dark:prose-invert max-w-none">
-                                <pre className="whitespace-pre-wrap font-sans text-sm md:text-base leading-relaxed">
-                                    {generatedPaper}
-                                </pre>
+                        {/* Result Score Card */}
+                        {mode === 'result' && evaluation && (
+                            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-8 text-white shadow-lg animate-in zoom-in">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-indigo-100 font-medium mb-1">Total Score</p>
+                                        <h3 className="text-4xl font-bold">{evaluation.studentScore} <span className="text-2xl opacity-70">/ {evaluation.totalMarks}</span></h3>
+                                    </div>
+                                    <Trophy className="w-16 h-16 text-yellow-300 opacity-90" />
+                                </div>
                             </div>
-                        </div>
+                        )}
+
+                        {/* Sections & Questions */}
+                        {paperData.sections.map((section, sIdx) => (
+                            <div key={sIdx} className="space-y-4">
+                                <h3 className="text-xl font-semibold text-slate-800 dark:text-white border-b pb-2">{section.name}</h3>
+                                {section.questions.map((q) => (
+                                    <div key={q.id}>
+                                        {renderQuestion(q, section.name)}
+                                        {mode === 'result' && renderResultParams(q.id)}
+                                    </div>
+                                ))}
+                            </div>
+                        ))}
+
+                        {/* Submit Button */}
+                        {mode === 'attempt' && (
+                            <div className="sticky bottom-6 flex justify-center pt-4">
+                                <button
+                                    onClick={handleSubmitPaper}
+                                    className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all text-lg"
+                                >
+                                    <CheckCircle2 className="w-6 h-6" /> Submit for Grading
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

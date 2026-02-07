@@ -13,7 +13,7 @@ echo Done.
 echo.
 
 echo [2/3] Starting Backend (Port 5050)...
-start "Atlas Backend - Port 5050" /D server cmd /k "node minimal_server.js"
+start "Atlas Backend - Port 5050" /D server cmd /k "node index.js"
 timeout /t 3 /nobreak >nul
 echo Backend window opened.
 echo.

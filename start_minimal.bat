@@ -13,5 +13,5 @@ echo.
 
 echo [2] Starting Minimal Backend (Port 5050)...
 cd server
-node minimal_server.js
+node index.js
 pause

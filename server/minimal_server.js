@@ -32,6 +32,24 @@ app.post('/api/ai/groq', async (req, res) => {
     try {
         if (!process.env.GROQ_API_KEY) throw new Error('Missing Groq API Key');
 
+        let { messages, model } = req.body;
+        const hasImages = messages?.some(m => Array.isArray(m.content));
+
+        // Choose correct model
+        const selectedModel = hasImages ? "llama-3.2-11b-vision-preview" : (model || 'llama-3.3-70b-versatile');
+
+        // ENSURE Content is string for Text Models
+        if (!hasImages) {
+            messages = messages.map(m => ({
+                ...m,
+                content: Array.isArray(m.content)
+                    ? m.content.map(c => c.text || JSON.stringify(c)).join('\n')
+                    : m.content
+            }));
+        }
+
+        console.log(`[Groq] Mode: ${hasImages ? 'VISION' : 'TEXT'} | Model: ${selectedModel}`);
+
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -39,8 +57,8 @@ app.post('/api/ai/groq', async (req, res) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: req.body.model || 'llama-3.3-70b-versatile',
-                messages: req.body.messages || []
+                model: selectedModel,
+                messages: messages
             })
         });
 
@@ -54,6 +72,26 @@ app.post('/api/ai/groq', async (req, res) => {
         res.json(data);
     } catch (error) {
         console.error('[GROQ] Error:', error.message);
+
+        // Fallback to Gemini if possible
+        if (process.env.GEMINI_API_KEY) {
+            console.log('[GROQ Failed] Attempting Gemini Fallback...');
+            try {
+                const prompt = req.body.messages?.[req.body.messages.length - 1]?.content || "Hello";
+                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+                const geminiRes = await fetch(geminiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: typeof prompt === 'string' ? prompt : JSON.stringify(prompt) }] }] })
+                });
+                const geminiData = await geminiRes.json();
+                const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "Error with fallback.";
+                return res.json({ choices: [{ message: { role: 'assistant', content: text } }] });
+            } catch (fallbackErr) {
+                console.error('[Fallback Failed]', fallbackErr.message);
+            }
+        }
+
         res.status(500).json({ error: error.message });
     }
 });

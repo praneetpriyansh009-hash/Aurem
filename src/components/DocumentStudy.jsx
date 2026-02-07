@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, FilePlus, Sparkles, BookOpen, Brain, CreditCard, Map, MessageSquare, Loader2, Bot, User, Upload, Layers, Lightbulb, FileText, X, ChevronRight, Copy, Check, MapPin, RefreshCw, Crown, Youtube, ChevronLeft, Shuffle, Eye } from './Icons';
+import { Send, FilePlus, Sparkles, BookOpen, Brain, CreditCard, Map, MessageSquare, Loader2, Bot, User, Upload, Layers, Lightbulb, FileText, X, ChevronRight, Copy, Check, MapPin, RefreshCw, Crown, ChevronLeft, Shuffle, Eye, Youtube, Trophy, AlertCircle, Play } from './Icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import * as pdfjsLib from 'pdfjs-dist';
-import { GROQ_API_URL, YOUTUBE_TRANSCRIPT_URL, formatGroqPayload, useRetryableFetch } from '../utils/api';
+import { GROQ_API_URL, formatGroqPayload, useRetryableFetch } from '../utils/api';
 import RagService from '../utils/ragService';
 
 // Configure PDF.js worker
@@ -20,10 +20,7 @@ const DocumentStudy = () => {
     const [fileName, setFileName] = useState('');
     const [isDragging, setIsDragging] = useState(false);
 
-    // Video State
-    const [videoUrl, setVideoUrl] = useState('');
-    const [videoData, setVideoData] = useState(null); // { id, title, thumbnail }
-    const [isVideoLoading, setIsVideoLoading] = useState(false);
+
 
     const [activeTab, setActiveTab] = useState('tools'); // 'tools' | 'chat'
     const [result, setResult] = useState('');
@@ -38,6 +35,13 @@ const DocumentStudy = () => {
     const [isCardFlipped, setIsCardFlipped] = useState(false);
     const [masteredCards, setMasteredCards] = useState(new Set());
     const [showFlashcardMode, setShowFlashcardMode] = useState(false);
+
+    // Quiz State
+    const [showQuizMode, setShowQuizMode] = useState(false);
+    const [quizData, setQuizData] = useState(null);
+    const [quizAnswers, setQuizAnswers] = useState({});
+    const [quizStep, setQuizStep] = useState('intro'); // intro, taking, result
+    const [quizStats, setQuizStats] = useState(null);
 
     // Chat State
     const [chatMessages, setChatMessages] = useState([]);
@@ -83,7 +87,7 @@ const DocumentStudy = () => {
         if (!file) return;
 
         setIsPdfLoading(true);
-        clearVideoData();
+        setIsPdfLoading(true);
         try {
             let content = '';
             let mimeType = file.type;
@@ -116,88 +120,16 @@ const DocumentStudy = () => {
         }
     };
 
-    // --- Video Handling ---
-
-    const extractYouTubeId = (url) => {
-        const patterns = [
-            /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-            /youtube\.com\/shorts\/([^&\n?#]+)/
-        ];
-        for (const pattern of patterns) {
-            const match = url.match(pattern);
-            if (match) return match[1];
-        }
-        return null;
-    };
-
-    const clearVideoData = () => {
-        setVideoUrl('');
-        setVideoData(null);
-    };
-
     const clearFileData = () => {
         setFileName('');
         setDocumentContent('');
         setFileData(null);
     };
 
-    const loadVideoUrl = async () => {
-        if (!videoUrl.trim()) return;
 
-        // Check if user can use YouTube feature (Premium only)
-        if (!canUseFeature('youtube')) {
-            triggerUpgradeModal('youtube');
-            return;
-        }
 
-        const videoId = extractYouTubeId(videoUrl);
-        if (!videoId) {
-            alert('Invalid YouTube URL. Please enter a valid YouTube video link.');
-            return;
-        }
 
-        setIsVideoLoading(true);
-        clearFileData();
 
-        try {
-            // Fetch transcript from backend
-            const response = await retryableFetch(YOUTUBE_TRANSCRIPT_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videoUrl, videoId })
-            });
-
-            setVideoData({
-                id: videoId,
-                title: response.title || 'YouTube Video',
-                thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
-            });
-
-            // Handle transcript availability
-            if (response.transcript && !response.noTranscript) {
-                setDocumentContent(response.transcript);
-            } else {
-                // No transcript available - set helpful context for AI
-                setDocumentContent(`[YouTube Video ID: ${videoId}]\n\nThis is a YouTube video. The automatic transcript is not available.\n\n📝 You can:\n1. Paste the video transcript manually in this text area\n2. Describe what the video is about for AI analysis\n3. Ask questions about the topic and the AI will help based on your description\n\nTip: Many YouTube videos have manual captions you can copy from the video page.`);
-            }
-
-            setChatMessages([]);
-            setResult('');
-            setFlashcards([]);
-            setShowFlashcardMode(false);
-        } catch (error) {
-            console.error('Video loading error:', error);
-            // Fallback: Allow proceeding without transcript
-            setVideoData({
-                id: videoId,
-                title: 'YouTube Video',
-                thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
-            });
-            setDocumentContent(`[YouTube Video: ${videoId}]\n\nNote: Could not load video data. You can manually paste the video transcript or description in the content area below, or use the chat to ask questions about the video topic.`);
-        } finally {
-            setIsVideoLoading(false);
-        }
-    };
 
     // --- AI Logic ---
 
@@ -253,7 +185,7 @@ const DocumentStudy = () => {
     // --- Tools ---
 
     const handleToolAction = async (action) => {
-        if (!documentContent && !fileData && !videoData) return alert("Please upload a file or enter a video URL first.");
+        if (!documentContent && !fileData) return alert("Please upload a file first.");
 
         // Check flashcard usage limit (3 per day for free users)
         if (action === 'flashcards') {
@@ -267,10 +199,33 @@ const DocumentStudy = () => {
         setResult('');
         setShowFlashcardMode(false);
 
+        const questionCount = isPro ? 20 : 10;
         const prompts = {
             summarize: "Summarize this document concisely with high-level bullet points and key takeaways. Use ✨ emojis for key points. Format beautifully with markdown headers and lists.",
             explain: "Explain the main concepts of this document in simple terms, as if teaching a beginner. Use 💡 for insights, 📖 for definitions, and ✅ for key takeaways. Format with clear sections.",
-            test: "Generate a quiz (5 questions) based on this content. Use beautiful formatting with ❓ for questions and ✅ for answers. Format: ## Question 1 \n**Question text**\n\nA) Option 1\nB) Option 2\nC) Option 3\nD) Option 4\n\n**✅ Correct Answer:** A",
+            test: `Generate a comprehensive interactive quiz (${questionCount} Questions) based on this content.
+            
+You MUST return ONLY a valid JSON object in this exact format:
+{
+  "title": "Quiz Title",
+  "questions": [
+    {
+      "id": 1,
+      "type": "objective",
+      "question": "Question text here?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correct_answer": "Option A",
+      "explanation": "Brief explanation of why A is correct."
+    }
+  ]
+}
+
+RULES:
+- Generate exactly ${questionCount} questions
+- Mix of conceptual and application-based questions
+- Options must be clear and distinct
+- correct_answer must EXACTLY match one of the options
+- Return ONLY the JSON object`,
             flashcards: `Generate 12-15 comprehensive flashcards covering ALL major topics and concepts in this content. Each flashcard should test understanding of a key concept.
 
 You MUST return ONLY a valid JSON object in this exact format:
@@ -314,41 +269,43 @@ RULES:
             systemPrompt += "\n\nAnalyze the provided image.";
         }
 
-        if (action === 'flashcards') {
-            const response = await callGroq(basePrompt, systemPrompt, true);
+        const isJsonMode = action === 'flashcards' || action === 'test';
+        const response = await callGroq(basePrompt, systemPrompt, isJsonMode);
 
-            if (response.error) {
-                setResult("Error: " + response.error);
-            } else {
-                try {
-                    // Parse JSON response
-                    let jsonContent = response.content;
-                    // Clean up if wrapped in markdown code blocks
-                    jsonContent = jsonContent.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        if (response.error) {
+            setResult("Error: " + response.error);
+        } else {
+            try {
+                // Parse JSON response for Flashcards Or Quiz
+                let jsonContent = response.content;
+                jsonContent = jsonContent.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+                const parsed = JSON.parse(jsonContent);
 
-                    const parsed = JSON.parse(jsonContent);
+                if (action === 'flashcards') {
                     const cards = parsed.flashcards || parsed;
-
                     if (Array.isArray(cards) && cards.length > 0) {
                         setFlashcards(cards);
                         setCurrentCardIndex(0);
                         setIsCardFlipped(false);
                         setMasteredCards(new Set());
                         setShowFlashcardMode(true);
-                        incrementUsage('flashcards'); // Track usage
-                    } else {
-                        throw new Error("Invalid flashcard format");
-                    }
-                } catch (parseError) {
-                    console.error("Flashcard parse error:", parseError);
-                    // Fallback to text display
-                    setResult(response.content);
+                        incrementUsage('flashcards');
+                    } else throw new Error("Invalid flashcard format");
+                } else if (action === 'test') {
+                    // Handle Quiz JSON
+                    if (parsed.questions && Array.isArray(parsed.questions)) {
+                        setQuizData(parsed);
+                        setQuizAnswers({});
+                        setQuizStep('taking');
+                        setQuizStats(null);
+                        setShowQuizMode(true);
+                        incrementUsage('quiz'); // Assuming 'quiz' usage for this too, or use general
+                    } else throw new Error("Invalid quiz format");
                 }
+            } catch (parseError) {
+                console.error("Parsing error:", parseError);
+                setResult(response.content); // Fallback
             }
-        } else {
-            const response = await callGroq(basePrompt, systemPrompt);
-            if (response.error) setResult("Error: " + response.error);
-            else setResult(response.content);
         }
 
         setIsLoading(false);
@@ -436,7 +393,7 @@ RULES:
     };
 
     const currentCard = flashcards[currentCardIndex];
-    const hasContent = documentContent || fileData || videoData;
+    const hasContent = documentContent || fileData;
 
     return (
         <div className={`h-full ${isDark ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'} font-sans transition-colors duration-300 overflow-y-auto custom-scrollbar`}>
@@ -483,58 +440,7 @@ RULES:
                     )}
                 </div>
 
-                {/* Video URL Input */}
-                <div className={`mb-4 p-4 rounded-2xl border transition-all animate-enter opacity-0 delay-150 ${isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-white border-gray-200'}`} style={{ animationFillMode: 'forwards' }}>
-                    <div className="flex items-center gap-2 mb-3">
-                        <Youtube className="w-5 h-5 text-red-500" />
-                        <span className="text-sm font-bold text-gray-500 uppercase tracking-wide">Or Load YouTube Video</span>
-                        {!isPro && (
-                            <span className="ml-2 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold rounded-full flex items-center gap-1">
-                                <Crown className="w-3 h-3" /> PRO
-                            </span>
-                        )}
-                    </div>
-                    <div className="flex gap-3">
-                        <input
-                            type="text"
-                            value={videoUrl}
-                            onChange={(e) => setVideoUrl(e.target.value)}
-                            placeholder="Paste YouTube URL (e.g., https://youtube.com/watch?v=...)"
-                            className={`flex-1 px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all
-                                ${isDark ? 'bg-gray-800 text-white placeholder-gray-500' : 'bg-gray-100 text-gray-900 placeholder-gray-400'}`}
-                        />
-                        <button
-                            onClick={loadVideoUrl}
-                            disabled={isVideoLoading || !videoUrl.trim()}
-                            className="px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white font-bold rounded-xl hover:from-red-600 hover:to-red-700 transition-all disabled:opacity-50 flex items-center gap-2"
-                        >
-                            {isVideoLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Youtube className="w-4 h-4" />}
-                            Load
-                        </button>
-                    </div>
 
-                    {/* Video Preview */}
-                    {videoData && (
-                        <div className="mt-4 flex items-center gap-4 p-3 rounded-xl bg-black/20">
-                            <img
-                                src={videoData.thumbnail}
-                                alt="Video thumbnail"
-                                className="w-24 h-16 object-cover rounded-lg"
-                                onError={(e) => { e.target.src = `https://img.youtube.com/vi/${videoData.id}/hqdefault.jpg`; }}
-                            />
-                            <div className="flex-1">
-                                <p className="font-bold text-sm">{videoData.title}</p>
-                                <p className="text-xs text-gray-500">Video loaded successfully</p>
-                            </div>
-                            <button
-                                onClick={clearVideoData}
-                                className="p-2 rounded-lg hover:bg-gray-500/20 transition-colors"
-                            >
-                                <X className="w-4 h-4 text-gray-500" />
-                            </button>
-                        </div>
-                    )}
-                </div>
 
                 {/* Extracted Content View */}
                 {documentContent && (
@@ -636,6 +542,152 @@ RULES:
                                 <div className="text-center py-12 animate-enter">
                                     <Loader2 className="w-10 h-10 text-orange-500 animate-spin mx-auto mb-4" />
                                     <p className="text-xs font-bold text-orange-500 uppercase tracking-widest animate-pulse">Aurem is analyzing...</p>
+                                </div>
+                            )}
+
+                            {/* Quiz Mode */}
+                            {showQuizMode && quizData && !isLoading && (
+                                <div className={`relative animate-enter w-full max-w-4xl mx-auto pb-20`}>
+
+                                    {/* Quiz Header */}
+                                    <div className="flex items-center justify-between mb-8 p-6 rounded-3xl glass-panel-lighter border border-white/10 shadow-lg">
+                                        <div>
+                                            <h2 className="text-2xl font-black bg-gradient-to-r from-purple-500 to-rose-500 bg-clip-text text-transparent">
+                                                {quizData.title || "Interactive Assessment"}
+                                            </h2>
+                                            <p className="text-sm font-bold text-gray-400 mt-1 uppercase tracking-wider">
+                                                {quizData.questions.length} Questions • AI Generated
+                                            </p>
+                                        </div>
+                                        {quizStep === 'taking' && (
+                                            <button
+                                                onClick={() => {
+                                                    // Calculate Score
+                                                    let correct = 0;
+                                                    let total = 0;
+                                                    const details = quizData.questions.map(q => {
+                                                        const ans = quizAnswers[q.id];
+                                                        const isCorrect = ans === q.correct_answer;
+                                                        if (q.type === 'objective') {
+                                                            total++;
+                                                            if (isCorrect) correct++;
+                                                        }
+                                                        return { ...q, user_answer: ans, is_correct: isCorrect };
+                                                    });
+                                                    setQuizStats({ score: Math.round((correct / total) * 100) || 0, correct, total, details });
+                                                    setQuizStep('result');
+                                                }}
+                                                className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold rounded-xl shadow-lg hover:shadow-green-500/20 hover:scale-105 transition-all"
+                                            >
+                                                Submit Test
+                                            </button>
+                                        )}
+                                        {quizStep === 'result' && (
+                                            <button
+                                                onClick={() => { setShowQuizMode(false); setQuizData(null); }}
+                                                className="px-6 py-3 bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-700 transition-all"
+                                            >
+                                                Close
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Taking Quiz */}
+                                    {quizStep === 'taking' && (
+                                        <div className="space-y-6">
+                                            {quizData.questions.map((q, i) => (
+                                                <div key={q.id} className={`p-6 md:p-8 rounded-[2rem] border transition-all hover:shadow-xl ${isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-white border-gray-100 shadow-md'}`}>
+                                                    <div className="flex gap-4">
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-orange-50 text-orange-500'}`}>
+                                                            {i + 1}
+                                                        </div>
+                                                        <div className="flex-1 space-y-4">
+                                                            <p className={`text-lg font-medium leading-relaxed ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{q.question}</p>
+
+                                                            {q.type === 'objective' && (
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                                                                    {q.options.map((opt, idx) => (
+                                                                        <label key={idx} className={`relative flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group
+                                                                        ${quizAnswers[q.id] === opt
+                                                                                ? 'border-orange-500 bg-orange-500/5'
+                                                                                : isDark ? 'border-gray-800 bg-gray-800/50 hover:border-gray-700' : 'border-gray-100 bg-gray-50 hover:border-gray-200'}
+                                                                    `}>
+                                                                            <input
+                                                                                type="radio"
+                                                                                name={`q-${q.id}`}
+                                                                                checked={quizAnswers[q.id] === opt}
+                                                                                onChange={() => setQuizAnswers({ ...quizAnswers, [q.id]: opt })}
+                                                                                className="hidden"
+                                                                            />
+                                                                            <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center transition-all ${quizAnswers[q.id] === opt ? 'border-orange-500' : 'border-gray-400 group-hover:border-gray-500'}`}>
+                                                                                {quizAnswers[q.id] === opt && <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />}
+                                                                            </div>
+                                                                            <span className={`font-medium ${quizAnswers[q.id] === opt ? 'text-orange-500' : isDark ? 'text-gray-400' : 'text-gray-600'}`}>{opt}</span>
+                                                                        </label>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Result View */}
+                                    {quizStep === 'result' && quizStats && (
+                                        <div className="space-y-8 animate-slide-up">
+                                            {/* Score Card */}
+                                            <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-indigo-900 to-purple-900 p-8 md:p-12 text-center text-white shadow-2xl">
+                                                <div className="relative z-10">
+                                                    <h3 className="text-xl font-bold opacity-80 uppercase tracking-widest mb-6">Your Performance</h3>
+                                                    <div className="flex flex-col items-center">
+                                                        <div className={`w-40 h-40 rounded-full flex items-center justify-center text-6xl font-black bg-white/10 backdrop-blur-md border-4 ${quizStats.score >= 80 ? 'border-emerald-400' : quizStats.score >= 50 ? 'border-amber-400' : 'border-rose-400'} shadow-2xl mb-6`}>
+                                                            {quizStats.score}%
+                                                        </div>
+                                                        <div className="flex gap-8 text-center">
+                                                            <div>
+                                                                <p className="text-4xl font-bold text-emerald-400">{quizStats.correct}</p>
+                                                                <p className="text-xs font-bold opacity-60 uppercase">Correct</p>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-4xl font-bold text-rose-400">{quizStats.total - quizStats.correct}</p>
+                                                                <p className="text-xs font-bold opacity-60 uppercase">Wrong</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/30 rounded-full blur-[80px] -z-0" />
+                                                <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/30 rounded-full blur-[80px] -z-0" />
+                                            </div>
+
+                                            {/* Detailed Review */}
+                                            <div className="space-y-6">
+                                                <h3 className="text-xl font-bold text-center">Detailed Solutions</h3>
+                                                {quizStats.details.map((q, i) => (
+                                                    <div key={i} className={`p-6 rounded-3xl border ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
+                                                        <p className="font-bold text-lg mb-4">{i + 1}. {q.question}</p>
+                                                        <div className="space-y-3 text-sm">
+                                                            <div className={`p-4 rounded-xl flex justify-between items-center ${q.is_correct ? 'bg-green-500/10 text-green-600 border border-green-500/20' : 'bg-red-500/10 text-red-600 border border-red-500/20'}`}>
+                                                                <span className="font-bold opacity-70">YOUR ANSWER</span>
+                                                                <span className="font-bold">{q.user_answer || "Not Attempted"}</span>
+                                                            </div>
+                                                            {!q.is_correct && (
+                                                                <div className="p-4 rounded-xl flex justify-between items-center bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                                                    <span className="font-bold opacity-70">CORRECT ANSWER</span>
+                                                                    <span className="font-bold">{q.correct_answer}</span>
+                                                                </div>
+                                                            )}
+                                                            <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
+                                                                <p className="opacity-80 leading-relaxed"><span className="font-bold">Explanation:</span> {q.explanation}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
                                 </div>
                             )}
 

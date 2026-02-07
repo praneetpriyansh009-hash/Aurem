@@ -10,7 +10,7 @@ taskkill /F /IM node.exe /T 2>nul
 echo.
 
 echo [2] Starting GROQ-ONLY Backend...
-start "Atlas Backend (Groq)" /D server cmd /k "node groq_server.js"
+start "Atlas Backend (Full)" /D server cmd /k "node index.js"
 echo Backend launched.
 echo.
 

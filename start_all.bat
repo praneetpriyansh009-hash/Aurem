@@ -11,7 +11,7 @@ timeout /t 2 /nobreak >nul
 echo.
 
 echo [2] Starting BACKEND (Port 5000)...
-start "Atlas Backend" /D server cmd /k "node groq_server.js"
+start "Atlas Backend (Full)" /D server cmd /k "node index.js"
 echo Backend launched in new window.
 echo.
 
