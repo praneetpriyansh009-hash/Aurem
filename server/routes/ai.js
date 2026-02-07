@@ -152,26 +152,24 @@ router.post('/podcast', async (req, res) => {
 
         const exchanges = tier === 'pro' ? 30 : 18;
 
-        const prompt = `You are an expert podcast script writer. Create an engaging, in-depth educational podcast conversation between two hosts:
-- Alex (the curious, enthusiastic host who asks insightful questions)
-- Sam (the knowledgeable expert who gives comprehensive explanations)
+        const prompt = `You are an expert podcast script writer. Create a highly engaging, natural, and conversational podcast script between two hosts:
+- Alex: An enthusiastic, curious host who asks insightful questions and sometimes interrupts with "Wait, really?" or "Hold on..."
+- Sam: A knowledgeable but relatable expert who explains concepts clearly, using analogies and occasional fillers like "um", "you know", or "exactly".
 
 Topic: ${topicContent}
 ${topics ? `Focus Areas: ${topics}` : ''}
 
-IMPORTANT REQUIREMENTS:
-1. Create EXACTLY ${exchanges} exchanges (each speaker takes turns)
-2. Make each response 2-4 sentences long for natural speech
-3. Include specific facts, examples, and real-world applications
-4. Have Alex ask follow-up questions that dig deeper
-5. Sam should explain concepts clearly with analogies when helpful
-6. Build the conversation progressively - start with basics, go deeper
-7. End with a summary of key takeaways
+CRITICAL RULES FOR HUMAN-LIKE DIALOGUE:
+1. **Natural Flow**: Avoid robotic Q&A. Use interruptions, agreements ("Right, right"), and reactions ("Wow", "That's wild").
+2. **Fillers**: Occasionally use "um", "uh", "you know", "like", "I mean" to sound spontaneous (but don't overdo it).
+3. **Emotions**: Show excitement, confusion, or realization. Use caps for emphasis (e.g., "It was HUGE!").
+4. **Sentence Variety**: Mix short punchy sentences with longer explanations. Start sentences with conjunctions (And, But, So).
+5. **Length**: EXACTLY ${exchanges} exchanges. Each response 2-4 sentences max.
 
 Output ONLY valid JSON in this exact format:
-{"script":[{"speaker":"Alex","text":"..."},{"speaker":"Sam","text":"..."}]}
+{"script":[{"speaker":"Alex","text":"Welcome back to the Deep Dive! Today... wow, we have something special."},{"speaker":"Sam","text":"Yeah, honestly, I've been waiting to talk about this one. It's... it's a game changer."}]}
 
-Start the podcast with an engaging introduction and end with a memorable conclusion.`;
+Start the conversation immediately with high energy.`;
 
         const msgs = [{ role: 'user', content: prompt }];
 

@@ -345,11 +345,31 @@ const PodcastGenerator = () => {
                 }
             }
 
+            // === HUMANIZE TEXT FOR NATURAL SPEECH ===
+            // Add natural pauses and rhythm to make speech less robotic
+            const humanizeText = (text) => {
+                return text
+                    // Add slight pause after commas (natural breathing)
+                    .replace(/,\s*/g, ', ')
+                    // Soften hard punctuation for flow
+                    .replace(/\.\.\./g, '... ')
+                    // Ensure proper spacing
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            };
+
+            const processedText = humanizeText(line.text);
+
             // Generate audio with Kokoro
             const voice = line.speaker === 'Alex' ? kokoroVoices.alex : kokoroVoices.sam;
             console.log(`[Kokoro] Generating audio for ${line.speaker} using voice: ${voice}`);
 
-            const audio = await kokoroTTS.generate(line.text, { voice });
+            // Generate with speed parameter for natural variation
+            const speed = line.speaker === 'Alex' ? 1.0 : 0.98; // Sam slightly slower, more thoughtful
+            const audio = await kokoroTTS.generate(processedText, {
+                voice,
+                speed // Kokoro speed parameter
+            });
 
             // Convert to playable audio
             if (!audioContextRef.current) {
@@ -362,13 +382,21 @@ const PodcastGenerator = () => {
 
             // Create and play audio element
             audioRef.current = new Audio(audioUrl);
-            audioRef.current.playbackRate = line.speaker === 'Alex' ? 1.0 : 0.95; // Slightly slower for Sam
+
+            // === HUMAN-LIKE PLAYBACK SETTINGS ===
+            // Slightly slower playback for conversational feel (not robotic fast)
+            audioRef.current.playbackRate = line.speaker === 'Alex' ? 0.95 : 0.92;
 
             audioRef.current.onended = () => {
                 setIsLoadingAudio(false);
                 URL.revokeObjectURL(audioUrl); // Clean up blob URL
                 if (isPlayingRef.current) {
-                    speakLine(index + 1);
+                    // Add tiny delay between speakers for natural turn-taking feel
+                    setTimeout(() => {
+                        if (isPlayingRef.current) {
+                            speakLine(index + 1);
+                        }
+                    }, 300); // 300ms pause between lines - like real conversation
                 }
             };
 
