@@ -798,6 +798,7 @@ The summary should be a concise, structured overview suitable for quick revision
                                 {/* Phase 7: Mastery Progression Gate */}
                                 {masteryLevel !== 'Advanced' && (
                                     <div className={`mt-12 p-8 md:p-12 border rounded-[32px] text-center glass-3d animate-in slide-in-from-bottom-8 ${isDark ? 'border-indigo-500/20 bg-indigo-500/5' : 'border-indigo-200 bg-indigo-50'}`}>
+                                        <div className="inline-block px-3 py-1 mb-4 rounded-full bg-orange-500/20 text-orange-500 font-black uppercase tracking-widest text-[10px] border border-orange-500/20">Under Development (Beta Version)</div>
                                         <h4 className="text-2xl font-black text-indigo-500 mb-2">Ready to Level Up?</h4>
                                         <p className={`${isDark ? 'text-slate-400' : 'text-slate-600'} mb-8 font-medium max-w-lg mx-auto`}>You are currently viewing <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{masteryLevel}</span> notes. Pass the required assessment to unlock deeper concepts.</p>
                                         <button

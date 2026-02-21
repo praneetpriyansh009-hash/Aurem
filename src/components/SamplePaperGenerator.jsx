@@ -272,9 +272,12 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
                         <FileText className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-black bg-gradient-to-r from-indigo-500 to-indigo-600 bg-clip-text text-transparent uppercase tracking-tight">
-                            Synthetic Examiner
-                        </h1>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-xl font-black bg-gradient-to-r from-indigo-500 to-indigo-600 bg-clip-text text-transparent uppercase tracking-tight">
+                                Synthetic Examiner
+                            </h1>
+                            <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 text-[10px] font-black uppercase tracking-widest border border-indigo-500/30 mt-1">Under Development (Beta Version)</span>
+                        </div>
                         <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mt-0.5">High-Fidelity Test Generation</p>
                     </div>
                 </div>

@@ -586,9 +586,12 @@ const PodcastGenerator = () => {
                         <Radio className="w-6 h-6 text-white animate-pulse" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-black bg-gradient-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent uppercase tracking-tight">
-                            Broadcast Studio
-                        </h1>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-xl font-black bg-gradient-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent uppercase tracking-tight">
+                                Broadcast Studio
+                            </h1>
+                            <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 text-[10px] font-black uppercase tracking-widest border border-orange-500/30">Under Development (Beta Version)</span>
+                        </div>
                         <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mt-0.5">Autonomous Audio Synthesis</p>
                     </div>
                 </div>
