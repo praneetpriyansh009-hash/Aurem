@@ -61,7 +61,9 @@ const UpgradeModal = () => {
             />
 
             {/* Modal */}
-            <div className={`relative w-full max-w-lg rounded-[2rem] overflow-hidden shadow-2xl animate-scale-in ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
+            <div className={`relative w-full max-w-lg rounded-[40px] overflow-hidden glass-3d glow-border animate-scale-in shadow-2xl
+                ${isDark ? 'bg-midnight-900 border-white/[0.08]' : 'bg-white border-warm-200/50'}
+            `}>
                 {/* Close Button */}
                 <button
                     onClick={handleClose}
@@ -105,7 +107,7 @@ const UpgradeModal = () => {
                 <div className="p-8 -mt-6">
                     {!showPayment ? (
                         /* Benefits View */
-                        <div className={`rounded-2xl p-6 border-2 border-orange-500/30 ${isDark ? 'bg-orange-500/5' : 'bg-orange-50'}`}>
+                        <div className={`rounded-[32px] p-6 border-2 glass-3d glow-border ${isDark ? 'bg-orange-500/10 border-orange-500/30' : 'bg-orange-50 border-orange-200'}`}>
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-3">
                                     <Sparkles className="w-6 h-6 text-orange-500" />
@@ -149,7 +151,7 @@ const UpgradeModal = () => {
                         </div>
                     ) : (
                         /* Payment Form View */
-                        <div className={`rounded-2xl p-6 border-2 border-orange-500/30 ${isDark ? 'bg-orange-500/5' : 'bg-orange-50'}`}>
+                        <div className={`rounded-[32px] p-6 border-2 glass-3d glow-border ${isDark ? 'bg-orange-500/10 border-orange-500/30' : 'bg-orange-50 border-orange-200'}`}>
                             {!paymentSuccess ? (
                                 <>
                                     <div className="space-y-4 mb-6">

@@ -6,14 +6,14 @@ const chatSchema = z.object({
         z.object({
             role: z.enum(['system', 'user', 'assistant']),
             content: z.union([
-                z.string().min(1).max(20000),
+                z.string().min(1).max(100000),
                 z.array(z.any()) // Allow mixed content for vision models
             ])
         })
     ).min(1),
     model: z.string().optional(),
     temperature: z.number().min(0).max(2).optional(),
-    max_tokens: z.number().min(1).max(4096).optional(),
+    max_tokens: z.number().min(1).max(100000).optional(),
     top_p: z.number().min(0).max(1).optional()
 });
 

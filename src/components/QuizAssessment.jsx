@@ -7,13 +7,14 @@ import CloudService from '../utils/cloudService';
 import RagService from '../utils/ragService';
 import { MOCK_SYLLABUS } from '../data/mockData';
 import SamplePaperGenerator from './SamplePaperGenerator';
+import LoopManager from './LearnLoop/LoopManager';
 
 
 
 const QuizAssessment = ({ retryableFetch, onNavigate }) => {
     const { isDark } = useTheme();
     const { canUseFeature, incrementUsage, triggerUpgradeModal, isPro, getRemainingUses } = useSubscription();
-    const [viewMode, setViewMode] = useState('quiz'); // 'quiz' or 'paper-gen'
+    const [viewMode, setViewMode] = useState('quiz'); // 'quiz', 'paper-gen', 'learn-loop'
     const [step, setStep] = useState('setup'); // setup, taking, grading, result
     const [config, setConfig] = useState({
         curriculum: 'CBSE', // CBSE or ICSE
@@ -373,11 +374,23 @@ DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, 
     };
 
     return (
-        <div className={`flex flex-col h-full ${isDark ? 'bg-gray-900' : 'bg-warm-100'} text-theme-primary relative overflow-y-auto custom-scrollbar p-4 md:p-8 transition-colors duration-300 section-quiz`}>
+        <div className={`flex flex-col h-full ${isDark ? 'bg-midnight-900' : 'bg-warm-50'} text-theme-primary relative overflow-y-auto custom-scrollbar p-4 md:p-8 transition-colors duration-300 section-quiz`}>
             <div className={`absolute top-0 right-0 w-[600px] h-[600px] ${isDark ? 'bg-purple-900/10' : 'bg-purple-400/10'} rounded-full blur-[100px] -z-10 pointer-events-none`} />
             <div className={`absolute bottom-0 left-0 w-[400px] h-[400px] ${isDark ? 'bg-rose-900/10' : 'bg-rose-400/10'} rounded-full blur-[100px] -z-10 pointer-events-none`} />
 
             {/* View Mode Toggle / Header logic if needed could go here, but we put it inside setup for now */}
+
+            {viewMode === 'learn-loop' && (
+                <div className="h-full flex flex-col">
+                    <button
+                        onClick={() => setViewMode('quiz')}
+                        className="mb-4 self-start flex items-center gap-2 text-sm font-bold text-theme-muted hover:text-theme-primary transition-colors z-20"
+                    >
+                        <ChevronRight className="w-4 h-4 rotate-180" /> Back to Assessment Hub
+                    </button>
+                    <LoopManager />
+                </div>
+            )}
 
             {viewMode === 'paper-gen' && (
                 <div className="h-full flex flex-col">
@@ -395,26 +408,29 @@ DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, 
                 <div className="flex-1 flex flex-col h-full animate-slide-up">
                     {/* Hero Header */}
                     <div className="text-center py-6 space-y-3">
-                        <div className="flex items-center justify-center gap-3">
-                            <div className="p-3 bg-gradient-to-br from-purple-500 to-rose-500 rounded-2xl shadow-lg">
+                        <div className="flex items-center justify-center gap-3 perspective-1000">
+                            <div className="p-3 bg-gradient-to-br from-purple-500 to-rose-500 rounded-2xl shadow-lg tilt-card translate-z-20">
                                 <Brain className="w-8 h-8 text-white" />
                             </div>
-                            <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-purple-500 via-rose-500 to-orange-400 bg-clip-text text-transparent">
-                                Quiz Generator
+                            <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-purple-500 via-rose-500 to-orange-400 bg-clip-text text-transparent translate-z-10">
+                                Assessment Hub
                             </h1>
                         </div>
                         <p className="text-theme-muted text-lg max-w-xl mx-auto">
-                            AI-powered assessments tailored to your syllabus
+                            Master your syllabus with AI Quizzes, Sample Papers, and Adaptive Learning Loops.
                             {!isPro && <span className="text-purple-500 ml-2">({getRemainingUses('quiz')} free left)</span>}
                         </p>
-                        <button
-                            type="button"
-                            onClick={() => setViewMode('paper-gen')}
-                            className="mt-2 inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 text-white font-bold rounded-full shadow-xl hover:shadow-purple-500/40 transition-all hover:scale-105"
-                        >
-                            <Sparkles className="w-5 h-5" />
-                            ✨ Upload Sample Paper & Generate New
-                        </button>
+
+                        <div className="flex flex-wrap justify-center gap-4 mt-6">
+                            <button
+                                type="button"
+                                onClick={() => setViewMode('paper-gen')}
+                                className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 border border-white/10 hover:bg-white/20 text-theme-primary font-bold rounded-full backdrop-blur-md transition-all hover:scale-105"
+                            >
+                                <FileText className="w-5 h-5 text-purple-400" />
+                                Smart Sample Papers
+                            </button>
+                        </div>
                     </div>
 
                     {/* Main Form */}
@@ -475,7 +491,7 @@ DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, 
                         {/* Row 3: Quiz Settings */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                             {/* Questions */}
-                            <div className={`p-5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg border ${isDark ? 'border-white/10' : 'border-gray-100'}`}>
+                            <div className={`p-5 rounded-2xl glass-3d glow-border ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-gray-100'}`}>
                                 <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-3">🔢 Questions</h3>
                                 <div className="grid grid-cols-3 gap-2">
                                     {[5, 10, 15, 20, 35].map(n => (
@@ -490,7 +506,7 @@ DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, 
                                 </div>
                             </div>
                             {/* Difficulty */}
-                            <div className={`p-5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg border ${isDark ? 'border-white/10' : 'border-gray-100'}`}>
+                            <div className={`p-5 rounded-2xl glass-3d glow-border ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-gray-100'}`}>
                                 <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-3">🎯 Difficulty</h3>
                                 <div className="space-y-2">
                                     {[{ v: 'Easy', l: '🟢 Easy', d: 'Basics & Theory' }, { v: 'Medium', l: '🟡 Medium', d: '50/50 Mix' }, { v: 'Hard', l: '🔴 Hard', d: 'HOTS & Application' }].map(d => (
@@ -505,7 +521,7 @@ DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, 
                                 </div>
                             </div>
                             {/* Type */}
-                            <div className={`p-5 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg border ${isDark ? 'border-white/10' : 'border-gray-100'}`}>
+                            <div className={`p-5 rounded-2xl glass-3d glow-border ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-gray-100'}`}>
                                 <h3 className="text-xs font-black text-theme-muted uppercase tracking-widest mb-3">📝 Type</h3>
                                 <div className="space-y-2">
                                     {[{ v: 'Objective', l: '✅ MCQs Only' }, { v: 'Subjective', l: '📝 Theory Only' }, { v: 'Mixed', l: '📋 Mixed Pattern' }].map(t => (
@@ -623,11 +639,11 @@ DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, 
                     {/* ... Result View (Kept mostly same, just ensuring variables match) ... */}
                     <div className="space-y-8 pb-10">
                         {/* Score Dashboard */}
-                        <div className={`glass-panel p-8 rounded-[32px] relative overflow-hidden ${isDark ? 'bg-gradient-to-br from-indigo-900/30 to-purple-900/20' : 'bg-gradient-to-br from-indigo-50 to-purple-50'}`}>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                        <div className={`glass-panel p-8 rounded-[32px] relative overflow-hidden perspective-2000 tilt-card ${isDark ? 'bg-gradient-to-br from-indigo-900/30 to-purple-900/20' : 'bg-gradient-to-br from-indigo-50 to-purple-50'}`}>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center preserve-3d">
                                 {/* Main Score */}
-                                <div className="md:col-span-1 flex flex-col items-center justify-center">
-                                    <div className={`w-32 h-32 rounded-full flex items-center justify-center text-5xl font-black bg-gradient-to-br ${assessmentStats.score >= 75 ? 'from-emerald-500 to-green-600' : assessmentStats.score >= 50 ? 'from-yellow-500 to-orange-500' : 'from-rose-500 to-red-600'} text-white shadow-2xl`}>
+                                <div className="md:col-span-1 flex flex-col items-center justify-center translate-z-50">
+                                    <div className={`w-32 h-32 rounded-full flex items-center justify-center text-5xl font-black bg-gradient-to-br ${assessmentStats.score >= 75 ? 'from-emerald-500 to-green-600' : assessmentStats.score >= 50 ? 'from-yellow-500 to-orange-500' : 'from-rose-500 to-red-600'} text-white shadow-2xl depth-glow`}>
                                         {assessmentStats.score}%
                                     </div>
                                     <p className="text-lg font-bold text-theme-primary mt-3">
@@ -637,19 +653,19 @@ DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, 
 
                                 {/* Stats Grid */}
                                 <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                                    <div className={`p-4 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
+                                    <div className={`p-4 rounded-2xl glass-3d glow-border ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
                                         <p className="text-3xl font-black text-emerald-500">{assessmentStats.correct}</p>
                                         <p className="text-xs font-bold text-theme-muted uppercase tracking-wider">Correct</p>
                                     </div>
-                                    <div className={`p-4 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
+                                    <div className={`p-4 rounded-2xl glass-3d glow-border ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
                                         <p className="text-3xl font-black text-rose-500">{assessmentStats.total - assessmentStats.correct}</p>
                                         <p className="text-xs font-bold text-theme-muted uppercase tracking-wider">Incorrect</p>
                                     </div>
-                                    <div className={`p-4 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
+                                    <div className={`p-4 rounded-2xl glass-3d glow-border ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
                                         <p className="text-3xl font-black text-purple-500">{assessmentStats.total}</p>
                                         <p className="text-xs font-bold text-theme-muted uppercase tracking-wider">Total MCQs</p>
                                     </div>
-                                    <div className={`p-4 rounded-2xl ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
+                                    <div className={`p-4 rounded-2xl glass-3d glow-border ${isDark ? 'bg-white/5' : 'bg-white'} shadow-lg`}>
                                         <p className="text-3xl font-black text-indigo-500">{config.difficulty}</p>
                                         <p className="text-xs font-bold text-theme-muted uppercase tracking-wider">Difficulty</p>
                                     </div>
@@ -666,7 +682,7 @@ DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, 
 
                         {/* Weak Concepts */}
                         {assessmentStats.analysis?.weak_concepts?.length > 0 && (
-                            <div className="glass-panel p-8 rounded-[40px]">
+                            <div className="glass-panel p-8 rounded-[40px] glass-3d glow-border">
                                 <h3 className="text-xl font-bold text-theme-primary mb-6 flex items-center gap-2"><Brain className="w-6 h-6 text-purple-500" /> Smart Remedial Plan</h3>
                                 <div className="grid gap-4">
                                     {assessmentStats.analysis.weak_concepts.map((c, i) => (
@@ -683,7 +699,7 @@ DATA: ${JSON.stringify(detailedAnswers.map(a => ({ q: a.question, type: a.type, 
                         )}
 
                         {/* Answer Key */}
-                        <div className="glass-panel p-8 rounded-[40px]">
+                        <div className="glass-panel p-8 rounded-[40px] glass-3d glow-border">
                             <h3 className="text-xl font-bold text-theme-primary mb-6">Detailed Solutions</h3>
                             <div className="space-y-6">
                                 {assessmentStats.detailedAnswers.map((a, i) => (

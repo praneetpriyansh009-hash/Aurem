@@ -147,29 +147,47 @@ router.post('/podcast', async (req, res) => {
         } else if (mode === 'syllabus') {
             topicContent = `Subject: ${syllabus.subject}, Topic: ${syllabus.topic}, Level: ${syllabus.level}`;
         } else {
-            topicContent = content ? content.substring(0, 2000) : 'general educational topic';
+            topicContent = content ? content.substring(0, 6000) : 'general educational topic';
         }
 
-        const exchanges = tier === 'pro' ? 30 : 18;
+        const exchanges = tier === 'pro' ? 40 : 24;
 
-        const prompt = `You are an expert podcast script writer. Create a highly engaging, natural, and conversational podcast script between two hosts:
-- Alex: An enthusiastic, curious host who asks insightful questions and sometimes interrupts with "Wait, really?" or "Hold on..."
-- Sam: A knowledgeable but relatable expert who explains concepts clearly, using analogies and occasional fillers like "um", "you know", or "exactly".
+        const prompt = `You are a world-class podcast script writer creating a DEEP, EDUCATIONAL conversation between two speakers. This is NOT a surface-level overview — it is a thorough, concept-by-concept breakdown.
 
-Topic: ${topicContent}
-${topics ? `Focus Areas: ${topics}` : ''}
+SPEAKERS:
+- Alex: The curious, engaged host. Asks sharp follow-up questions. Challenges Sam to go deeper. Occasionally shares "aha moments" or connects ideas to everyday life. Thinks out loud.
+- Sam: The brilliant teacher-friend. Explains complex things using vivid, relatable, daily-life analogies (cooking, sports, driving, social media, etc.). Goes deep into WHY things work, not just WHAT they are. Self-corrects sometimes. Thinks step-by-step.
 
-CRITICAL RULES FOR HUMAN-LIKE DIALOGUE:
-1. **Natural Flow**: Avoid robotic Q&A. Use interruptions, agreements ("Right, right"), and reactions ("Wow", "That's wild").
-2. **Fillers**: Occasionally use "um", "uh", "you know", "like", "I mean" to sound spontaneous (but don't overdo it).
-3. **Emotions**: Show excitement, confusion, or realization. Use caps for emphasis (e.g., "It was HUGE!").
-4. **Sentence Variety**: Mix short punchy sentences with longer explanations. Start sentences with conjunctions (And, But, So).
-5. **Length**: EXACTLY ${exchanges} exchanges. Each response 2-4 sentences max.
+=== SOURCE MATERIAL (USE ALL OF THIS) ===
+${topicContent}
+${topics ? `\n=== FOCUS AREAS ===\n${topics}` : ''}
 
-Output ONLY valid JSON in this exact format:
-{"script":[{"speaker":"Alex","text":"Welcome back to the Deep Dive! Today... wow, we have something special."},{"speaker":"Sam","text":"Yeah, honestly, I've been waiting to talk about this one. It's... it's a game changer."}]}
+=== CRITICAL RULES ===
 
-Start the conversation immediately with high energy.`;
+1. **CONTENT DEPTH IS KING**: Cover EVERY major concept from the source material. Don't skip anything. If the document has 5 topics, discuss all 5 in detail. Each concept should get at least 2-3 exchanges of discussion.
+
+2. **REAL-WORLD EXAMPLES**: For EVERY concept, Sam MUST give a concrete, daily-life example:
+   - Physics forces? → "Think about when you're in a car and it brakes suddenly — your body lurches forward. That's inertia."
+   - Chemical bonding? → "It's like two friends sharing their lunch — that's covalent bonding."
+   - Economics inflation? → "Remember when that samosa used to cost ₹5? Now it's ₹15. That's inflation hitting your pocket."
+   - Math derivatives? → "It's literally just asking: how fast is something changing RIGHT NOW? Like checking your speedometer."
+
+3. **NATURAL CONVERSATION** (but NOT empty filler):
+   - Alex's reactions should ADD value: "Wait, so you're saying that even gravity is just curved spacetime? That changes everything."
+   - Use occasional fillers like "honestly", "I mean", "right", but NEVER let fillers replace actual content.
+   - Include moments of genuine curiosity: "Okay but here's what I don't get..." followed by a real question.
+   - Self-correction that teaches: "Actually wait, I said 6 but it's really 8 — because we're counting the noble gases too."
+
+4. **STRUCTURE**: Start with a hook, build up systematically through concepts, end with a powerful summary/takeaway.
+
+5. **LENGTH**: EXACTLY ${exchanges} exchanges. Each response should be 2-5 sentences. Make every sentence count — no fluff.
+
+6. **SPEAKER BALANCE**: Alternate strictly between Alex and Sam. Alex asks, reacts, connects; Sam explains, analogizes, deepens.
+
+Output ONLY valid JSON:
+{"script":[{"speaker":"Alex","text":"..."},{"speaker":"Sam","text":"..."}]}
+
+Begin with energy and immediately dive into the first concept.`;
 
         const msgs = [{ role: 'user', content: prompt }];
 

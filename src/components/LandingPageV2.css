@@ -1,0 +1,403 @@
+/* Landing Page V2 Styles - Phase 5 Cosmic Neon Redesign */
+.lp-page-v2 {
+    color: white;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    width: 100%;
+    position: relative;
+    z-index: 50;
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+    background: #03030b;
+    /* Deepest cosmic void */
+}
+
+/* Float animations */
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translate(0, 0);
+    }
+
+    33% {
+        transform: translate(15px, -25px);
+    }
+
+    66% {
+        transform: translate(-10px, 15px);
+    }
+}
+
+@keyframes floatSlow {
+
+    0%,
+    100% {
+        transform: translate(0, 0);
+    }
+
+    50% {
+        transform: translate(20px, -20px);
+    }
+}
+
+/* Marquee animation for College Belt */
+@keyframes marquee {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+.animate-marquee {
+    display: flex;
+    width: max-content;
+    animation: marquee 40s linear infinite;
+}
+
+.animate-marquee:hover {
+    animation-play-state: paused;
+}
+
+/* Shooting Star Animation */
+@keyframes loginStar {
+    0% {
+        transform: rotate(315deg) translateX(0);
+        opacity: 1;
+    }
+
+    70% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: rotate(315deg) translateX(-1500px);
+        opacity: 0;
+    }
+}
+
+.star-track {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-45deg);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Static stars background animation */
+@keyframes stars-move {
+    from {
+        transform: translateY(0);
+    }
+
+    to {
+        transform: translateY(-1000px);
+    }
+}
+
+.stars-bg {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    opacity: 0.5;
+}
+
+/* ✨ VOLUMETRIC GLASSMORPHISM ✨ */
+.glass-panel {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+.glass-panel-heavy {
+    background: linear-gradient(135deg, rgba(20, 20, 35, 0.4) 0%, rgba(10, 10, 20, 0.6) 100%);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    /* violet tinted border */
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* 3D Glass Hover Effects */
+.glass-3d-hover {
+    transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+    transform-style: preserve-3d;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Infinite Marquee Animations */
+@keyframes marquee {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+.animate-marquee {
+    animation: marquee 30s linear infinite;
+    display: inline-flex;
+    width: max-content;
+}
+
+.animate-marquee-fast {
+    animation: marquee 45s linear infinite;
+}
+
+.hover\:pause:hover {
+    animation-play-state: paused;
+}
+
+.glass-3d-hover::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    transition: all 0.5s ease;
+    transform: skewX(-20deg);
+}
+
+.glass-3d-hover:hover::before {
+    left: 100%;
+}
+
+.glass-3d-hover:hover {
+    transform: translateY(-10px) scale(1.02) rotateX(2deg) rotateY(-2deg);
+    box-shadow: -20px 20px 40px rgba(0, 0, 0, 0.6), 0 0 40px rgba(99, 102, 241, 0.3);
+    border-color: rgba(139, 92, 246, 0.4);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+}
+
+.review-card {
+    background: linear-gradient(145deg, rgba(30, 30, 45, 0.4), rgba(15, 15, 25, 0.6));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Ambient glow text */
+.text-glow {
+    text-shadow: 0 0 30px rgba(129, 140, 248, 0.5);
+}
+
+/* Mobile optimizations */
+.mobile-overflow-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    padding-bottom: 10px;
+    /* space for scrollbar */
+}
+
+/* Mastery Loop Step */
+.loop-step {
+    transition: all 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.loop-step::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at right, rgba(99, 102, 241, 0.1), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.5s ease;
+}
+
+.loop-step:hover::after {
+    opacity: 1;
+}
+
+.loop-step:hover {
+    transform: scale(1.03) translateX(10px);
+    background: rgba(30, 30, 50, 0.3);
+    border-color: rgba(139, 92, 246, 0.4);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* Custom Webkit Scrollbar for Table */
+.mobile-overflow-x::-webkit-scrollbar {
+    height: 6px;
+}
+
+.mobile-overflow-x::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+}
+
+.mobile-overflow-x::-webkit-scrollbar-thumb {
+    background: rgba(129, 140, 248, 0.3);
+    border-radius: 10px;
+}
+
+.mobile-overflow-x::-webkit-scrollbar-thumb:hover {
+    background: rgba(129, 140, 248, 0.6);
+}
+
+/* Sparkle animation for button */
+@keyframes sparkle {
+
+    0%,
+    100% {
+        opacity: 0;
+        transform: scale(0);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.sparkle-icon {
+    animation: sparkle 2s ease-in-out infinite;
+}
+
+/* ✨ PHASE 5: RADICAL REDESIGN ANIMATIONS ✨ */
+
+/* Holographic Flowing Border */
+@keyframes holo-flow {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+.holographic-border {
+    position: relative;
+    z-index: 1;
+}
+
+.holographic-border::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #ff007f, #7928ca, #00d4ff, #7928ca, #ff007f);
+    background-size: 400% 400%;
+    animation: holo-flow 4s ease infinite;
+    z-index: -1;
+    opacity: 0.8;
+    filter: blur(4px);
+    transition: opacity 0.3s ease;
+}
+
+.holographic-border:hover::before {
+    opacity: 1;
+    filter: blur(8px);
+}
+
+/* The Neural Core Pulse & Morph */
+@keyframes neural-pulse {
+
+    0%,
+    100% {
+        transform: scale(1) rotate(0deg);
+        border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+        box-shadow: 0 0 40px rgba(121, 40, 202, 0.4), inset 0 0 40px rgba(0, 212, 255, 0.4);
+    }
+
+    50% {
+        transform: scale(1.05) rotate(180deg);
+        border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+        box-shadow: 0 0 80px rgba(0, 212, 255, 0.6), inset 0 0 80px rgba(255, 0, 127, 0.4);
+    }
+}
+
+.neural-core {
+    background: linear-gradient(135deg, rgba(121, 40, 202, 0.2), rgba(0, 212, 255, 0.2));
+    animation: neural-pulse 10s ease-in-out infinite alternate;
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 3D Wireframe Floating Geometry */
+@keyframes wireframe-spin {
+    from {
+        transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
+    }
+
+    to {
+        transform: rotateX(360deg) rotateY(720deg) rotateZ(360deg);
+    }
+}
+
+.wireframe-cube {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    transform-style: preserve-3d;
+    animation: wireframe-spin 20s linear infinite;
+    opacity: 0.15;
+    pointer-events: none;
+}
+
+.wireframe-cube .face {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border: 1px solid #00d4ff;
+    background: rgba(0, 212, 255, 0.02);
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.2) inset;
+}
+
+.wireframe-cube .front {
+    transform: translateZ(30px);
+}
+
+.wireframe-cube .back {
+    transform: rotateY(180deg) translateZ(30px);
+}
+
+.wireframe-cube .right {
+    transform: rotateY(90deg) translateZ(30px);
+}
+
+.wireframe-cube .left {
+    transform: rotateY(-90deg) translateZ(30px);
+}
+
+.wireframe-cube .top {
+    transform: rotateX(90deg) translateZ(30px);
+}
+
+.wireframe-cube .bottom {
+    transform: rotateX(-90deg) translateZ(30px);
+}
+
+/* Deep Cosmic Colors */
+.text-cosmic {
+    background: linear-gradient(135deg, #ff007f, #7928ca, #00d4ff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 30px rgba(121, 40, 202, 0.4);
+}

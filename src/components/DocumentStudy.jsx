@@ -1,1067 +1,985 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, FilePlus, Sparkles, BookOpen, Brain, CreditCard, Map, MessageSquare, Loader2, Bot, User, Upload, Layers, Lightbulb, FileText, X, ChevronRight, Copy, Check, MapPin, RefreshCw, Crown, ChevronLeft, Shuffle, Eye, Youtube, Trophy, AlertCircle, Play } from './Icons';
+import { Send, FilePlus, Sparkles, BookOpen, Brain, CreditCard, MessageSquare, Loader2, Bot, User, Upload, Layers, Lightbulb, FileText, X, ChevronRight, Copy, Check, RefreshCw, Crown, ChevronLeft, Shuffle, Eye, Youtube, Trophy, AlertCircle, Play, Video, Target, Calendar, BrainCircuit } from './Icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import * as pdfjsLib from 'pdfjs-dist';
 import { GROQ_API_URL, formatGroqPayload, useRetryableFetch } from '../utils/api';
-import RagService from '../utils/ragService';
+import MindMapViewer from './MindMapViewer';
+import MasteryLoop from './MasteryLoop';
+import { extractVideoId, fetchTranscript } from '../utils/youtubeService';
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs';
 
+// ─────────────────────────────────────────────────
+// Markdown Renderer — renders raw markdown as rich HTML
+// ─────────────────────────────────────────────────
+const MarkdownRenderer = ({ text, isDark }) => {
+    if (!text) return null;
+
+    const lines = text.split('\n');
+    const elements = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+
+        // Table detection
+        if (line.includes('|') && i + 1 < lines.length && lines[i + 1]?.match(/^\s*\|[\s\-:|]+\|\s*$/)) {
+            const headerCells = line.split('|').filter(c => c.trim());
+            i += 2; // skip header + separator
+            const rows = [];
+            while (i < lines.length && lines[i].includes('|')) {
+                rows.push(lines[i].split('|').filter(c => c.trim()));
+                i++;
+            }
+            elements.push(
+                <div key={`table-${i}`} className="my-6 overflow-x-auto rounded-2xl border border-indigo-500/20">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className={`${isDark ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
+                                {headerCells.map((cell, j) => (
+                                    <th key={j} className={`px-5 py-3.5 text-left font-bold text-xs uppercase tracking-wider ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
+                                        {renderInline(cell.trim())}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {rows.map((row, ri) => (
+                                <tr key={ri} className={`border-t ${isDark ? 'border-white/[0.04] hover:bg-white/[0.02]' : 'border-slate-100 hover:bg-slate-50'} transition-colors`}>
+                                    {row.map((cell, ci) => (
+                                        <td key={ci} className={`px-5 py-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                                            {renderInline(cell.trim())}
+                                        </td>
+                                    ))}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            );
+            continue;
+        }
+
+        // Horizontal rule
+        if (line.match(/^---+$/) || line.match(/^\*\*\*+$/)) {
+            elements.push(<hr key={`hr-${i}`} className={`my-6 ${isDark ? 'border-white/[0.06]' : 'border-slate-200'}`} />);
+            i++;
+            continue;
+        }
+
+        // Headers
+        if (line.startsWith('#### ')) {
+            elements.push(<h4 key={`h4-${i}`} className={`text-base font-bold mt-6 mb-2 ${isDark ? 'text-violet-400' : 'text-violet-700'}`}>{renderInline(line.replace('#### ', ''))}</h4>);
+            i++; continue;
+        }
+        if (line.startsWith('### ')) {
+            elements.push(<h3 key={`h3-${i}`} className={`text-lg font-bold mt-8 mb-3 ${isDark ? 'text-indigo-400' : 'text-indigo-700'}`}>{renderInline(line.replace('### ', ''))}</h3>);
+            i++; continue;
+        }
+        if (line.startsWith('## ')) {
+            elements.push(<h2 key={`h2-${i}`} className={`text-xl font-black mt-10 mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>{renderInline(line.replace('## ', ''))}</h2>);
+            i++; continue;
+        }
+        if (line.startsWith('# ')) {
+            elements.push(<h1 key={`h1-${i}`} className={`text-2xl font-black mt-10 mb-4 bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent`}>{renderInline(line.replace('# ', ''))}</h1>);
+            i++; continue;
+        }
+
+        // Blockquote
+        if (line.startsWith('> ')) {
+            elements.push(
+                <blockquote key={`bq-${i}`} className={`my-4 pl-5 py-2 border-l-4 ${isDark ? 'border-indigo-500 bg-indigo-500/5 text-indigo-200' : 'border-indigo-400 bg-indigo-50 text-indigo-900'} rounded-r-xl italic`}>
+                    <p className="text-sm leading-relaxed">{renderInline(line.replace('> ', ''))}</p>
+                </blockquote>
+            );
+            i++; continue;
+        }
+
+        // Bullet list
+        if (line.trim().startsWith('- ') || line.trim().startsWith('* ') || line.trim().startsWith('• ')) {
+            const indent = line.search(/\S/);
+            const level = Math.floor(indent / 2);
+            elements.push(
+                <div key={`li-${i}`} className={`flex gap-3 my-1.5 ${level > 0 ? 'ml-6' : ''}`}>
+                    <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${isDark ? 'bg-indigo-400' : 'bg-indigo-500'}`} />
+                    <span className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{renderInline(line.trim().replace(/^[-*•]\s*/, ''))}</span>
+                </div>
+            );
+            i++; continue;
+        }
+
+        // Numbered list
+        if (line.trim().match(/^\d+\.\s/)) {
+            const num = line.trim().match(/^(\d+)\./)[1];
+            elements.push(
+                <div key={`ol-${i}`} className="flex gap-3 my-1.5">
+                    <span className={`text-sm font-bold shrink-0 w-6 text-right ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{num}.</span>
+                    <span className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{renderInline(line.trim().replace(/^\d+\.\s*/, ''))}</span>
+                </div>
+            );
+            i++; continue;
+        }
+
+        // Empty line
+        if (!line.trim()) {
+            elements.push(<div key={`sp-${i}`} className="h-2" />);
+            i++; continue;
+        }
+
+        // Regular paragraph
+        elements.push(<p key={`p-${i}`} className={`my-2 text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{renderInline(line)}</p>);
+        i++;
+    }
+
+    return <div className="space-y-0.5">{elements}</div>;
+};
+
+// Inline formatting: **bold**, *italic*, `code`
+const renderInline = (text) => {
+    if (!text) return text;
+    const parts = [];
+    let remaining = text;
+    let key = 0;
+
+    while (remaining.length > 0) {
+        // Code
+        const codeMatch = remaining.match(/`([^`]+)`/);
+        // Bold
+        const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
+        // Italic
+        const italicMatch = remaining.match(/\*(.+?)\*/);
+
+        let firstMatch = null;
+        let firstIndex = Infinity;
+
+        if (codeMatch && remaining.indexOf(codeMatch[0]) < firstIndex) {
+            firstMatch = { type: 'code', match: codeMatch };
+            firstIndex = remaining.indexOf(codeMatch[0]);
+        }
+        if (boldMatch && remaining.indexOf(boldMatch[0]) < firstIndex) {
+            firstMatch = { type: 'bold', match: boldMatch };
+            firstIndex = remaining.indexOf(boldMatch[0]);
+        }
+        if (italicMatch && !boldMatch && remaining.indexOf(italicMatch[0]) < firstIndex) {
+            firstMatch = { type: 'italic', match: italicMatch };
+            firstIndex = remaining.indexOf(italicMatch[0]);
+        }
+
+        if (!firstMatch) {
+            parts.push(remaining);
+            break;
+        }
+
+        // Text before match
+        if (firstIndex > 0) {
+            parts.push(remaining.substring(0, firstIndex));
+        }
+
+        if (firstMatch.type === 'bold') {
+            parts.push(<strong key={key++} className="font-bold text-theme-primary">{firstMatch.match[1]}</strong>);
+        } else if (firstMatch.type === 'italic') {
+            parts.push(<em key={key++} className="italic opacity-90">{firstMatch.match[1]}</em>);
+        } else if (firstMatch.type === 'code') {
+            parts.push(<code key={key++} className="px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 text-xs font-mono">{firstMatch.match[1]}</code>);
+        }
+
+        remaining = remaining.substring(firstIndex + firstMatch.match[0].length);
+    }
+
+    return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : <>{parts}</>;
+};
+
+
 const DocumentStudy = () => {
     const { isDark } = useTheme();
     const { retryableFetch } = useRetryableFetch();
-    const { canUseFeature, incrementUsage, triggerUpgradeModal, isPro, getRemainingUses } = useSubscription();
+    const { canUseFeature, incrementUsage, triggerUpgradeModal, isPro } = useSubscription();
 
-    // State
+    // --- State: Navigation & Flow ---
+    const [viewMode, setViewMode] = useState('input'); // 'input' | 'loading' | 'study'
+    const [activeSection, setActiveSection] = useState('notes'); // 'notes' | 'summaries' | 'cards' | 'quiz'
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+    const [isChapterModalOpen, setIsChapterModalOpen] = useState(false);
+    const [chapterSearch, setChapterSearch] = useState('');
+    const [isChatOpen, setIsChatOpen] = useState(false);
+
+    // --- UI: Components ---
+
+    const Flashcard = ({ card, isDark }) => {
+        const [isFlipped, setIsFlipped] = useState(false);
+        return (
+            <div
+                onClick={() => setIsFlipped(!isFlipped)}
+                className="relative h-64 w-full cursor-pointer perspective-1000 group"
+            >
+                <div className={`relative w-full h-full transition-all duration-700 preserve-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
+                    {/* Front */}
+                    <div className={`absolute inset-0 backface-hidden p-8 rounded-[32px] border glass-3d glow-border flex flex-col justify-center text-center
+                        ${isDark ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-white/90 border-warm-200/50'}
+                    `}>
+                        <div className="absolute top-6 right-6"><Brain className="w-5 h-5 text-indigo-500/50" /></div>
+                        <span className={`absolute top-6 left-6 text-[10px] font-black uppercase px-3 py-1 rounded-full ${card.difficulty === 'hard' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>{card.difficulty || 'medium'}</span>
+                        <h4 className="text-xl font-black leading-relaxed text-theme-primary">{card.question}</h4>
+                        <p className="mt-8 text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">Click to Reveal</p>
+                    </div>
+                    {/* Back */}
+                    <div className={`absolute inset-0 backface-hidden rotate-y-180 p-8 rounded-[32px] border flex flex-col justify-center text-center bg-gradient-to-br from-indigo-600 to-blue-700 text-white border-indigo-400 shadow-2xl shadow-indigo-500/20`}>
+                        <div className="absolute top-6 right-6"><Sparkles className="w-5 h-5 text-white/50" /></div>
+                        <p className="text-lg font-bold leading-relaxed">{card.answer}</p>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // --- State: Content ---
     const [documentContent, setDocumentContent] = useState('');
-    const [fileData, setFileData] = useState(null); // { mimeType, data (base64) } for vision
-    const [pdfImages, setPdfImages] = useState([]); // Array of base64 images from PDF pages (for handwritten)
+    const [fileData, setFileData] = useState(null);
+    const [pdfImages, setPdfImages] = useState([]);
     const [fileName, setFileName] = useState('');
-    const [isDragging, setIsDragging] = useState(false);
+    const [videoUrl, setVideoUrl] = useState('');
 
-
-
-    const [activeTab, setActiveTab] = useState('tools'); // 'tools' | 'chat'
-    const [result, setResult] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [isPdfLoading, setIsPdfLoading] = useState(false);
-    const [copied, setCopied] = useState(false);
-    const [isContentCollapsed, setIsContentCollapsed] = useState(false);
-
-    // Flashcard State
+    // --- State: Results / Data ---
+    const [notes, setNotes] = useState('');
+    const [summary, setSummary] = useState('');
     const [flashcards, setFlashcards] = useState([]);
-    const [currentCardIndex, setCurrentCardIndex] = useState(0);
-    const [isCardFlipped, setIsCardFlipped] = useState(false);
-    const [masteredCards, setMasteredCards] = useState(new Set());
-    const [showFlashcardMode, setShowFlashcardMode] = useState(false);
-
-    // Quiz State
-    const [showQuizMode, setShowQuizMode] = useState(false);
+    const [mindMapData, setMindMapData] = useState(null);
     const [quizData, setQuizData] = useState(null);
-    const [quizAnswers, setQuizAnswers] = useState({});
-    const [quizStep, setQuizStep] = useState('intro'); // intro, taking, result
-    const [quizStats, setQuizStats] = useState(null);
-
-    // Chat State
+    const [quizError, setQuizError] = useState(null);
     const [chatMessages, setChatMessages] = useState([]);
-    const [chatInput, setChatInput] = useState('');
-    const [isChatLoading, setIsChatLoading] = useState(false);
 
+    // Phase 7: Mastery Loop Progression
+    const [masteryLevel, setMasteryLevel] = useState('Beginner'); // Beginner, Intermediate, Advanced
+    const [isLevelUnlocked, setIsLevelUnlocked] = useState(false);
+    const [chatInput, setChatInput] = useState('');
+    const [isActionLoading, setIsActionLoading] = useState(false);
+
+    // --- Refs ---
     const fileInputRef = useRef(null);
     const chatEndRef = useRef(null);
 
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
-    // --- File Handling ---
+    // --- SYSTEM PROMPT ---
+    const AUREM_LENS_SYSTEM_PROMPT = `You are AUREM LENS — an elite cognitive augmentation system designed for serious students.
+Your role is to transform raw content into deeply detailed, comprehensive study material that rivals the best textbooks.
 
-    const fileToBase64 = (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = error => reject(error);
-        });
-    };
+TONE: Expert, authoritative, structured, academically rigorous yet clear.
+RULES:
+- ALWAYS produce LONG, DETAILED content (minimum 1500-2000 words for notes)
+- Break content into clear modules with ## headers and ### subsections
+- Define every key term using **bold** formatting
+- Include comparison tables (| Col | Col |) wherever data can be compared
+- Use numbered lists for processes, sequences, and step-by-step explanations
+- Use bullet points for properties, characteristics, and feature lists
+- Include formulas, equations, and numerical examples where relevant
+- Add > blockquotes for critical takeaways and exam tips
+- Use --- horizontal rules between major sections
+- End each major section with a "Key Takeaways" summary
+- NEVER produce surface-level summaries — go DEEP into the subject matter
+- Include real-world applications and examples to aid understanding`;
 
-    // Convert PDF pages to images (for handwritten notes)
-    const convertPdfToImages = async (arrayBuffer, maxPages = 5) => {
+    // --- Helpers: AI Communication ---
+    const callAI = async (prompt, systemPrompt, jsonMode = false) => {
         try {
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            const images = [];
-            const pagesToRender = Math.min(pdf.numPages, maxPages);
-
-            console.log(`[AuremLens] Converting ${pagesToRender} PDF pages to images for vision OCR...`);
-
-            for (let i = 1; i <= pagesToRender; i++) {
-                const page = await pdf.getPage(i);
-                const scale = 1.5; // Good balance of quality vs size
-                const viewport = page.getViewport({ scale });
-
-                // Create canvas for rendering
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-
-                // Render PDF page to canvas
-                await page.render({
-                    canvasContext: context,
-                    viewport: viewport
-                }).promise;
-
-                // Convert canvas to base64 JPEG (smaller than PNG)
-                const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
-                images.push({
-                    pageNum: i,
-                    data: base64,
-                    mimeType: 'image/jpeg'
-                });
-
-                console.log(`[AuremLens] Page ${i} converted (${Math.round(base64.length / 1024)}KB)`);
-            }
-
-            return images;
-        } catch (err) {
-            console.error("PDF to image conversion error:", err);
-            return [];
-        }
-    };
-
-    const extractPdfTextPreview = async (arrayBuffer) => {
-        try {
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            let fullText = '';
-            let totalChars = 0;
-            const pagesToRead = Math.min(pdf.numPages, 10); // Limit to 10 pages
-
-            for (let i = 1; i <= pagesToRead; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(' ');
-                fullText += `--- Page ${i} ---\n${pageText}\n\n`;
-                totalChars += pageText.replace(/\s/g, '').length; // Count non-whitespace chars
-            }
-
-            if (pdf.numPages > 10) fullText += `\n... (Remaining ${pdf.numPages - 10} pages truncacted for performance)`;
-
-            // Return text and char count (to detect handwritten PDFs)
-            return { text: fullText.trim(), charCount: totalChars, totalPages: pdf.numPages };
-        } catch (err) {
-            console.error("PDF extraction error:", err);
-            return { text: '', charCount: 0, totalPages: 0 };
-        }
-    };
-
-    const processFile = async (file) => {
-        if (!file) return;
-
-        setIsPdfLoading(true);
-        setPdfImages([]); // Reset PDF images
-
-        try {
-            let content = '';
-            let mimeType = file.type;
-            let base64 = null;
-            let pdfPageImages = [];
-
-            if (file.type === 'application/pdf') {
-                const arrayBuffer = await file.arrayBuffer();
-
-                // Clone the arrayBuffer for reuse (PDF.js consumes it)
-                const arrayBufferForText = arrayBuffer.slice(0);
-                const arrayBufferForImages = arrayBuffer.slice(0);
-
-                const { text, charCount, totalPages } = await extractPdfTextPreview(arrayBufferForText);
-
-                // Detect if PDF is likely handwritten (very low text per page)
-                const avgCharsPerPage = charCount / Math.max(totalPages, 1);
-                const isLikelyHandwritten = avgCharsPerPage < 100; // Less than 100 chars per page = handwritten
-
-                console.log(`[AuremLens] PDF Analysis: ${charCount} chars, ${totalPages} pages, ${avgCharsPerPage.toFixed(0)} avg per page. Handwritten: ${isLikelyHandwritten}`);
-
-                if (isLikelyHandwritten) {
-                    // Convert to images for vision processing (using fresh copy of buffer)
-                    pdfPageImages = await convertPdfToImages(arrayBufferForImages, 5);
-                    content = `[Handwritten PDF detected - ${pdfPageImages.length} pages converted to images for AI vision analysis]`;
-
-                    // Also set the first image as fileData for immediate vision support
-                    if (pdfPageImages.length > 0) {
-                        base64 = pdfPageImages[0].data;
-                        mimeType = 'image/jpeg';
-                    }
-                } else {
-                    content = text || '[PDF Content Extracted]';
-                }
-            } else if (file.type.startsWith('image/')) {
-                base64 = await fileToBase64(file);
-                content = `[Image Loaded: ${file.name}]`;
-            } else {
-                content = await file.text();
-            }
-
-            setFileName(file.name);
-            setDocumentContent(content);
-            setFileData(base64 ? { mimeType, data: base64 } : null);
-            setPdfImages(pdfPageImages);
-            setChatMessages([]);
-            setResult('');
-            setFlashcards([]);
-            setShowFlashcardMode(false);
-        } catch (error) {
-            console.error('File processing error:', error);
-            alert('Failed to process file');
-        } finally {
-            setIsPdfLoading(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-    };
-
-    const clearFileData = () => {
-        setFileName('');
-        setDocumentContent('');
-        setFileData(null);
-        setPdfImages([]);
-    };
-
-
-
-
-
-
-    // --- AI Logic ---
-
-    const callGroq = async (prompt, systemPrompt, jsonMode = false) => {
-        try {
-            let payload;
-
-            // Vision Request - handles single image OR multiple PDF page images
-            const hasVisionContent = fileData || (pdfImages && pdfImages.length > 0);
-
-            if (hasVisionContent) {
-                // Build content array with text prompt first
-                const content = [
-                    { type: "text", text: taskPrompt(prompt, systemPrompt) }
-                ];
-
-                // Add images - either single file or multiple PDF pages
-                if (pdfImages && pdfImages.length > 0) {
-                    // Multiple PDF page images (handwritten notes)
-                    console.log(`[AuremLens] Sending ${pdfImages.length} PDF page images to vision API`);
-                    pdfImages.forEach((img, idx) => {
-                        content.push({
-                            type: "image_url",
-                            image_url: { url: `data:${img.mimeType};base64,${img.data}` }
-                        });
-                    });
-                } else if (fileData) {
-                    // Single image file
-                    content.push({
-                        type: "image_url",
-                        image_url: { url: `data:${fileData.mimeType};base64,${fileData.data}` }
-                    });
-                }
-
-                payload = {
-                    model: "llama-3.2-11b-vision-preview",
-                    messages: [{ role: "user", content }],
-                    temperature: 0.5,
-                    max_tokens: jsonMode ? 8192 : 4096 // Increased for multi-page analysis
-                };
-            }
-            // Text Request (Llama 3.1 8B)
-            else {
-                payload = {
-                    model: "llama-3.1-8b-instant",
-                    ...formatGroqPayload(prompt, systemPrompt)
-                };
-                if (jsonMode) {
-                    payload.response_format = { type: "json_object" };
-                }
-            }
+            const payload = {
+                model: "llama-3.3-70b-versatile",
+                messages: [
+                    { role: 'system', content: systemPrompt || AUREM_LENS_SYSTEM_PROMPT },
+                    { role: 'user', content: prompt }
+                ],
+                temperature: 0.4,
+                max_tokens: 8192,
+            };
+            if (jsonMode) payload.response_format = { type: "json_object" };
 
             const result = await retryableFetch(GROQ_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            return { content: result.choices?.[0]?.message?.content };
-        } catch (e) {
-            console.error(`[AuremLens] Groq Error:`, e);
-            return { error: e.message };
+
+            if (result.error) return { error: result.message || result.error };
+            return { content: result.choices?.[0]?.message?.content || '' };
+        } catch (err) {
+            return { error: err.message };
         }
     };
 
-    const taskPrompt = (userRequest, sysContext) => {
-        // Helper to combine system context and user request for vision models which might behave better with single user message
-        return `${sysContext}\n\nUSER REQUEST: ${userRequest}`;
-    };
+    // --- Logic: Study Initiation ---
+    const startStudy = async (contentSource = null, targetLevel = 'Beginner') => {
+        if (!contentSource && !documentContent && !fileData) return alert("Missing content source");
 
-    // --- Tools ---
+        setViewMode('loading');
+        setMasteryLevel(targetLevel);
 
-    const handleToolAction = async (action) => {
-        if (!documentContent && !fileData) return alert("Please upload a file first.");
+        let levelDirective = "Focus on foundational concepts, simple analogies, and clear definitions. Avoid overly dense jargon.";
+        if (targetLevel === 'Intermediate') levelDirective = "Focus on application, complex mechanisms, and connecting concepts together. Increase depth.";
+        if (targetLevel === 'Advanced') levelDirective = "Perform an EXHAUSTIVE, TEXTBOOK-LEVEL content analysis. Cover every edge case, formula, and advanced theory.";
 
-        // Check flashcard usage limit (3 per day for free users)
-        if (action === 'flashcards') {
-            if (!canUseFeature('flashcards')) {
-                triggerUpgradeModal('flashcards');
-                return;
-            }
+        const ingestionPrompt = `Generate COMPREHENSIVE study notes based on the document.
+CURRENT MASTERY LEVEL: ${targetLevel}.
+DIRECTIVE: ${levelDirective}
+
+You MUST produce at least 1500 words. This is NOT a summary — it is a complete study guide tailored to the current level.
+
+FORMAT REQUIREMENTS:
+- Use # for the main title
+- Use ## for each major module/section (at least 4-6 sections)
+- Use ### for subsections and sub-topics within each module
+- Use #### for specific concepts, theorems, or definitions
+- Use **bold** for every key term, definition, formula name, and important concept
+- Use bullet points (- ) for properties, characteristics, features, and lists
+- Use numbered lists (1. ) for step-by-step processes, derivations, and sequences
+- Use tables (| Header | Header |) for comparisons, properties, data, formulas, and classification
+- Use > blockquotes for critical exam tips, important warnings, and "Remember" notes
+- Use horizontal rules (---) to separate major sections
+
+CONTENT STRUCTURE (follow this strictly):
+1. Start with a 3-4 sentence executive summary introducing the topic and its significance
+2. Break into 4-6 logical modules, each containing:
+   - Detailed explanation of concepts (not surface level)
+   - Definitions in **bold** with explanations
+   - Examples with worked-out solutions where applicable
+   - Comparison tables for related concepts
+   - Formulas/equations formatted clearly
+   - > Key Takeaway at end of each section
+3. Include a "Common Mistakes & Misconceptions" section
+4. End with a comprehensive "Quick Revision" summary table
+
+IMPORTANT: Be THOROUGH. Cover EVERY aspect of the topic. Students should NOT need another resource after reading your notes.
+
+Also provide a separate executive summary after a "---CONTENT_SPLIT---" divider.
+The summary should be a concise, structured overview suitable for quick revision.`;
+
+        const sysPrompt = `${AUREM_LENS_SYSTEM_PROMPT}\n\nCONTENT:\n${(contentSource || documentContent).slice(0, 20000)}`;
+
+        const res = await callAI(ingestionPrompt, sysPrompt);
+
+        if (res.error) {
+            alert("AI Ingestion failed: " + res.error);
+            setViewMode('input');
+            return;
         }
 
-        setIsLoading(true);
-        setResult('');
-        setShowFlashcardMode(false);
-
-        const questionCount = isPro ? 20 : 10;
-        const prompts = {
-            summarize: "Summarize this document concisely with high-level bullet points and key takeaways. Use ✨ emojis for key points. Format beautifully with markdown headers and lists.",
-            explain: "Explain the main concepts of this document in simple terms, as if teaching a beginner. Use 💡 for insights, 📖 for definitions, and ✅ for key takeaways. Format with clear sections.",
-            test: `Generate a comprehensive interactive quiz (${questionCount} Questions) based on this content.
-            
-You MUST return ONLY a valid JSON object in this exact format:
-{
-  "title": "Quiz Title",
-  "questions": [
-    {
-      "id": 1,
-      "type": "objective",
-      "question": "Question text here?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correct_answer": "Option A",
-      "explanation": "Brief explanation of why A is correct."
-    }
-  ]
-}
-
-RULES:
-- Generate exactly ${questionCount} questions
-- Mix of conceptual and application-based questions
-- Options must be clear and distinct
-- correct_answer must EXACTLY match one of the options
-- Return ONLY the JSON object`,
-            flashcards: `Generate 12-15 comprehensive flashcards covering ALL major topics and concepts in this content. Each flashcard should test understanding of a key concept.
-
-You MUST return ONLY a valid JSON object in this exact format:
-{
-  "flashcards": [
-    {
-      "id": 1,
-      "topic": "Topic/Category Name",
-      "question": "Clear, specific question that tests understanding",
-      "answer": "Comprehensive answer explaining the concept",
-      "difficulty": "easy"
-    },
-    {
-      "id": 2,
-      "topic": "Another Topic",
-      "question": "Another question",
-      "answer": "Another answer",
-      "difficulty": "medium"
-    }
-  ]
-}
-
-RULES:
-- Generate 12-15 flashcards minimum
-- Cover ALL major topics comprehensively
-- difficulty must be one of: "easy", "medium", "hard"
-- Questions should be specific and test real understanding
-- Answers should be detailed and educational
-- Group related concepts under the same topic
-- Return ONLY the JSON object, no other text`
-        };
-
-        const basePrompt = prompts[action];
-        let systemPrompt = "You are AUREM, an expert educational AI assistant. Always format your responses beautifully with markdown, emojis, and clear structure.";
-
-        // RAG / Context Building
-        if (documentContent && !fileData) {
-            const truncatedContent = documentContent.slice(0, 15000);
-            systemPrompt += `\n\nDOCUMENT CONTENT:\n${truncatedContent}\n\nAnalyze the document above.`;
-        } else if (fileData) {
-            systemPrompt += "\n\nAnalyze the provided image.";
-        }
-
-        const isJsonMode = action === 'flashcards' || action === 'test';
-        const response = await callGroq(basePrompt, systemPrompt, isJsonMode);
-
-        if (response.error) {
-            setResult("Error: " + response.error);
+        if (res.content.includes("---CONTENT_SPLIT---")) {
+            const [n, s] = res.content.split("---CONTENT_SPLIT---");
+            setNotes(n?.trim() || res.content);
+            setSummary(s?.trim() || "Summary could not be fully separated, please check notes.");
         } else {
-            try {
-                // Parse JSON response for Flashcards Or Quiz
-                let jsonContent = response.content;
-                jsonContent = jsonContent.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-                const parsed = JSON.parse(jsonContent);
+            setNotes(res.content);
+            setSummary("Detailed summary integrated into the notes above.");
+        }
 
-                if (action === 'flashcards') {
-                    const cards = parsed.flashcards || parsed;
-                    if (Array.isArray(cards) && cards.length > 0) {
-                        setFlashcards(cards);
-                        setCurrentCardIndex(0);
-                        setIsCardFlipped(false);
-                        setMasteredCards(new Set());
-                        setShowFlashcardMode(true);
-                        incrementUsage('flashcards');
-                    } else throw new Error("Invalid flashcard format");
-                } else if (action === 'test') {
-                    // Handle Quiz JSON
-                    if (parsed.questions && Array.isArray(parsed.questions)) {
-                        setQuizData(parsed);
-                        setQuizAnswers({});
-                        setQuizStep('taking');
-                        setQuizStats(null);
-                        setShowQuizMode(true);
-                        incrementUsage('quiz'); // Assuming 'quiz' usage for this too, or use general
-                    } else throw new Error("Invalid quiz format");
+        setViewMode('study');
+    };
+
+    const handleLevelUp = () => {
+        const nextLevel = masteryLevel === 'Beginner' ? 'Intermediate' : 'Advanced';
+        setQuizData(null); // Reset quiz for new level
+        setIsLevelUnlocked(false); // Reset lock
+        setActiveSection('notes'); // Take user back to notes tab
+        // Use documentContent as the explicit source
+        startStudy(documentContent, nextLevel);
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setFileName(file.name);
+
+        if (file.type === 'application/pdf') {
+            const buffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+            let text = '';
+            for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                if (content && content.items) {
+                    text += content.items.map(item => item.str || '').join(' ') + '\n';
                 }
-            } catch (parseError) {
-                console.error("Parsing error:", parseError);
-                setResult(response.content); // Fallback
             }
+            setDocumentContent(text);
+        } else if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (re) => setFileData({ mimeType: file.type, data: re.target.result.split(',')[1] });
+            reader.readAsDataURL(file);
+        } else {
+            setDocumentContent(await file.text());
         }
 
-        setIsLoading(false);
+        // Wait a tick for state to update
+        await new Promise(r => setTimeout(r, 100));
+        startStudy();
     };
 
-    // --- Flashcard Controls ---
+    const handleYouTubeAnalysis = async () => {
+        if (!videoUrl) return;
+        const id = extractVideoId(videoUrl);
+        if (!id) return alert("Invalid URL");
 
-    const nextCard = () => {
-        setCurrentCardIndex(prev => (prev + 1) % flashcards.length);
-        setIsCardFlipped(false);
-    };
-
-    const prevCard = () => {
-        setCurrentCardIndex(prev => (prev - 1 + flashcards.length) % flashcards.length);
-        setIsCardFlipped(false);
-    };
-
-    const shuffleCards = () => {
-        const shuffled = [...flashcards].sort(() => Math.random() - 0.5);
-        setFlashcards(shuffled);
-        setCurrentCardIndex(0);
-        setIsCardFlipped(false);
-    };
-
-    const toggleMastered = (cardId) => {
-        setMasteredCards(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(cardId)) {
-                newSet.delete(cardId);
-            } else {
-                newSet.add(cardId);
-            }
-            return newSet;
-        });
-    };
-
-    const getDifficultyColor = (difficulty) => {
-        switch (difficulty?.toLowerCase()) {
-            case 'easy': return 'text-green-500 bg-green-500/10';
-            case 'medium': return 'text-yellow-500 bg-yellow-500/10';
-            case 'hard': return 'text-red-500 bg-red-500/10';
-            default: return 'text-gray-500 bg-gray-500/10';
+        setViewMode('loading');
+        try {
+            const data = await fetchTranscript(id);
+            setFileName(`YouTube: ${id}`);
+            startStudy(data.transcript);
+        } catch (e) {
+            alert("Transcript not available");
+            setViewMode('input');
         }
     };
 
-    const getDifficultyEmoji = (difficulty) => {
-        switch (difficulty?.toLowerCase()) {
-            case 'easy': return '🟢';
-            case 'medium': return '🟡';
-            case 'hard': return '🔴';
-            default: return '⚪';
-        }
-    };
-
-    // --- Chat ---
-
+    // --- AI Logic: Chat ---
     const handleChatSubmit = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
         const msg = chatInput.trim();
-        if (!msg) return;
+        if (!msg || isActionLoading) return;
 
         setChatInput('');
         setChatMessages(prev => [...prev, { role: 'user', text: msg }]);
-        setIsChatLoading(true);
+        setIsActionLoading(true);
 
-        let systemPrompt = "You are AUREM. Answer the question based on the document. Use clear headers: ## Summary (for a quick takeaway) and ## Explanation (for details). Use ✨ for summaries and 💡 for insights. Keep it clean and tidy.";
-        if (documentContent && !fileData) {
-            const truncatedContent = documentContent.slice(0, 15000);
-            systemPrompt += `\n\nCONTEXT:\n${truncatedContent}`;
+        const sysPrompt = `${AUREM_LENS_SYSTEM_PROMPT}\nYou are in INTELLIGENT CHAT MODE. 
+        Context: ${documentContent.slice(0, 15000)}
+        Respond using ONLY the knowledge base provided. Be concise, use markdown formatting.`;
+
+        const res = await callAI(msg, sysPrompt);
+        setChatMessages(prev => [...prev, { role: 'model', text: res.content || "Connection lost. Try again." }]);
+        setIsActionLoading(false);
+    };
+
+    // --- AI Logic: Specific Tools ---
+    const generateSpecificTool = async (type) => {
+        if (isActionLoading) return;
+        setIsActionLoading(true);
+        setActiveSection(type);
+        setIsLevelUnlocked(false); // Reset mastery state when generating a new quiz
+
+        const toolPrompts = {
+            cards: `Generate 10-12 elite flashcards. Output strictly as a JSON object: { "flashcards": [{ "question": "...", "answer": "...", "difficulty": "easy|medium|hard" }] }`,
+            quiz: `Generate 10-15 multiple choice questions strictly assessing the provided study material. CURRENT MASTERY LEVEL: ${masteryLevel}. Respond ONLY with a valid JSON object. No conversational text. Format: { "questions": [{ "question": "...", "options": ["A", "B", "C", "D"], "answer": "Exact correct option text", "explanation": "Why?" }] }`,
+            mindmap: `Generate a hierarchical mind map. Output strictly as a JSON object: { "name": "Topic", "children": [{ "name": "Subtopic", "children": [] }] }`
+        };
+
+        const res = await callAI(toolPrompts[type], `Extract questions directly and exclusively from this study material:\n\nSTUDY MATERIAL:\n${notes.slice(0, 15000) || documentContent.slice(0, 15000)}`, true);
+
+        if (res.error) {
+            if (type === 'quiz') setQuizError(res.error);
+            else alert("Generation failed: " + res.error);
+        } else {
+            try {
+                // Aggressive JSON extraction
+                let jsonStr = res.content;
+                const jsonMatch = res.content.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+                if (jsonMatch) {
+                    jsonStr = jsonMatch[0];
+                } else {
+                    jsonStr = res.content.replace(/```json|```/g, '').trim();
+                }
+
+                const data = JSON.parse(jsonStr);
+
+                if (type === 'cards') {
+                    const parsedCards = data.flashcards || (Array.isArray(data) ? data : []);
+                    if (parsedCards.length === 0) throw new Error("No flashcards found in AI response.");
+                    setFlashcards(parsedCards);
+                }
+                if (type === 'quiz') {
+                    const parsedQuiz = data.questions || (Array.isArray(data) ? data : []);
+                    if (parsedQuiz.length === 0) throw new Error("No quiz questions found in AI response.");
+                    setQuizError(null);
+                    setQuizData(parsedQuiz);
+                }
+                if (type === 'mindmap') {
+                    setMindMapData(data);
+                }
+            } catch (e) {
+                console.error("AI Parse Error:", e, res.content);
+                if (type === 'quiz') {
+                    setQuizError("The AI generated an invalid concept structure. This happens occasionally with complex topics. Please try generating again.");
+                } else {
+                    alert("The AI generated an invalid format. Please click generate again.");
+                    setActiveSection('notes'); // fallback
+                }
+            }
         }
-
-        const response = await callGroq(msg, systemPrompt);
-
-        const reply = response.error ? "Error: " + response.error : response.content;
-        setChatMessages(prev => [...prev, { role: 'model', text: reply }]);
-        setIsChatLoading(false);
+        setIsActionLoading(false);
     };
 
-    // --- UI Helpers ---
+    // ═══════════════════════════════════════════════
+    // VIEWS
+    // ═══════════════════════════════════════════════
 
-    const copyToClipboard = () => {
-        navigator.clipboard.writeText(result);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    };
-
-    const currentCard = flashcards[currentCardIndex];
-    const hasContent = documentContent || fileData;
-
-    return (
-        <div className={`h-full ${isDark ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'} font-sans transition-colors duration-300 overflow-y-auto custom-scrollbar`}>
-
-            {/* Header - Animate Enter */}
-            <div className="py-4 md:py-6 text-center animate-enter">
-                <div className="flex items-center justify-center gap-2 md:gap-3 mb-1">
-                    <Eye className="w-6 h-6 md:w-8 md:h-8 text-orange-500" />
-                    <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-orange-400 to-amber-500">Aurem Lens</h1>
+    const renderInputView = () => (
+        <div className="max-w-4xl mx-auto py-12 px-6 space-y-12">
+            <div className="text-center space-y-4">
+                <div className={`inline-flex items-center justify-center w-20 h-20 rounded-[28px] bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 mb-4 scale-up glass-3d glow-border`}>
+                    <Eye className="w-10 h-10 text-white" />
                 </div>
-                <p className="text-[9px] md:text-[10px] font-bold tracking-[0.15em] md:tracking-[0.2em] text-gray-500 uppercase px-4">Upload Documents or Videos for AI Analysis</p>
+                <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent uppercase">Aurem Lens</h1>
+                <p className="text-theme-muted text-lg font-medium">Unified Cognitive Augmentation Engine</p>
             </div>
 
-            <div className="max-w-5xl mx-auto w-full px-3 md:px-6 pb-8 md:pb-12 flex flex-col">
-
-                {/* Upload Area - Delayed Enter */}
-                <div
-                    onClick={() => fileInputRef.current?.click()}
-                    onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-                    onDragLeave={() => setIsDragging(false)}
-                    onDrop={e => {
-                        e.preventDefault();
-                        setIsDragging(false);
-                        processFile(e.dataTransfer.files?.[0]);
-                    }}
-                    className={`relative shrink-0 mb-4 border-2 border-dashed rounded-2xl md:rounded-3xl p-4 md:p-8 text-center cursor-pointer transition-all duration-300 group animate-enter opacity-0 delay-100 fill-mode-forwards
-                        ${isDragging ? 'border-orange-500 bg-orange-500/10' : isDark ? 'border-gray-800 bg-gray-900/50 hover:border-gray-700' : 'border-gray-300 bg-white hover:border-orange-400'}
-                    `}
-                    style={{ animationFillMode: 'forwards' }}
-                >
-                    <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md,image/*" onChange={e => processFile(e.target.files?.[0])} className="hidden" />
-
-                    {fileName ? (
-                        <div className="animate-in fade-in zoom-in duration-300">
-                            <FileText className="w-12 h-12 mx-auto mb-3 text-orange-500" />
-                            <h3 className="text-xl font-bold">{fileName}</h3>
-                            <p className="text-xs text-gray-500 mt-2 font-medium tracking-wide">Click to change file</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {[
+                    { id: 'chapter', title: 'Study a Chapter', desc: 'AI-guided deep dive into any topic', icon: BookOpen, color: 'text-violet-500', bg: 'bg-violet-500/10' },
+                    { id: 'document', title: 'Upload Document', desc: 'PDFs, Images, Handwritten notes', icon: FilePlus, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+                    { id: 'youtube', title: 'YouTube Video', desc: 'Transcribe and analyze lectures', icon: Youtube, color: 'text-red-500', bg: 'bg-red-500/10' }
+                ].map(card => (
+                    <div
+                        key={card.id}
+                        onClick={() => {
+                            if (card.id === 'document') fileInputRef.current?.click();
+                            if (card.id === 'chapter') setIsChapterModalOpen(true);
+                        }}
+                        className={`group relative p-8 rounded-[32px] border glass-3d glow-border transition-all duration-500 cursor-pointer overflow-hidden
+                            ${isDark ? 'bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.06]' : 'bg-white/90 border-warm-200/50 hover:border-indigo-200 shadow-sm'}
+                            hover:-translate-y-2
+                        `}
+                    >
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform group-hover:scale-110 ${card.bg} ${card.color}`}>
+                            <card.icon className="w-7 h-7" />
                         </div>
-                    ) : (
-                        <div className="group-hover:scale-105 transition-transform duration-300">
-                            <Upload className={`w-12 h-12 mx-auto mb-3 ${isPdfLoading ? 'text-orange-500 animate-bounce' : 'text-gray-600'}`} />
-                            <h3 className="text-lg font-bold text-gray-400">{isPdfLoading ? 'Processing...' : 'Click or Drag File'}</h3>
-                        </div>
-                    )}
-                </div>
+                        <h3 className="text-xl font-bold mb-2">{card.title}</h3>
+                        <p className="text-sm text-slate-500 leading-relaxed">{card.desc}</p>
 
-
-
-                {/* Extracted Content View */}
-                {documentContent && (
-                    <div className={`shrink-0 mb-6 rounded-2xl border overflow-hidden transition-all duration-300 animate-enter ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-                        <div
-                            onClick={() => setIsContentCollapsed(!isContentCollapsed)}
-                            className="flex items-center justify-between p-4 cursor-pointer hover:bg-white/5"
-                        >
-                            <h4 className="text-xs font-bold text-orange-500 uppercase tracking-widest flex items-center gap-2">
-                                <FilePlus className="w-4 h-4" /> View/Edit Extracted Content
-                            </h4>
-                            <ChevronRight className={`w-4 h-4 text-gray-500 transition-transform ${isContentCollapsed ? '' : 'rotate-90'}`} />
-                        </div>
-
-                        {!isContentCollapsed && (
-                            <div className="px-4 pb-4">
-                                <textarea
-                                    value={documentContent}
-                                    onChange={e => setDocumentContent(e.target.value)}
-                                    className={`w-full h-32 p-3 text-xs font-mono rounded-xl resize-y focus:outline-none focus:ring-1 focus:ring-orange-500 transition-colors
-                                        ${isDark ? 'bg-black/30 text-gray-400' : 'bg-gray-50 text-gray-700'}`}
+                        {card.id === 'youtube' && (
+                            <form
+                                onSubmit={e => { e.preventDefault(); handleYouTubeAnalysis(); }}
+                                className="mt-6 flex gap-2"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <input
+                                    type="text"
+                                    placeholder="Paste URL..."
+                                    className={`flex-1 text-xs p-2.5 rounded-xl border focus:outline-none focus:ring-1 focus:ring-red-500/30 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}
+                                    value={videoUrl}
+                                    onChange={e => setVideoUrl(e.target.value)}
                                 />
-                                <div className="flex justify-end mt-2">
-                                    <span className="text-[10px] text-gray-600">{documentContent.length} characters loaded</span>
-                                </div>
-                            </div>
+                                <button type="submit" className="p-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"><ChevronRight className="w-4 h-4" /></button>
+                            </form>
                         )}
+                    </div>
+                ))}
+            </div>
+
+            {/* Study a Chapter Modal */}
+            {isChapterModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in">
+                    <div className={`w-full max-w-lg rounded-3xl p-8 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-2xl'}`}>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold">Study a Chapter</h2>
+                            <button onClick={() => setIsChapterModalOpen(false)} className="p-2 hover:bg-slate-400/10 rounded-full"><X className="w-5 h-5" /></button>
+                        </div>
+                        <p className="text-sm text-slate-500 mb-6">Tell us what you want to learn. AUREM will fetch and structure the entire chapter for you.</p>
+                        <form onSubmit={e => {
+                            e.preventDefault();
+                            if (!chapterSearch.trim()) return;
+                            setIsChapterModalOpen(false);
+                            setFileName(chapterSearch);
+                            startStudy(`Topic: ${chapterSearch}\n\nAct as a comprehensive textbook and provide detailed information on this topic.`);
+                        }}>
+                            <div className="relative mb-6">
+                                <input
+                                    autoFocus
+                                    type="text"
+                                    value={chapterSearch}
+                                    onChange={e => setChapterSearch(e.target.value)}
+                                    placeholder="e.g. Newton's Third Law, Carbonates, History of Rome..."
+                                    className={`w-full p-5 pr-14 rounded-2xl border text-lg font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all ${isDark ? 'bg-white/[0.03] border-white/[0.1] text-white' : 'bg-warm-50 border-warm-200'}`}
+                                />
+                                <button type="submit" className="absolute right-3 top-3 p-3 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all"><Sparkles className="w-5 h-5" /></button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
+        </div>
+    );
+
+    const renderLoadingView = () => (
+        <div className="h-full flex flex-col items-center justify-center p-12 text-center">
+            <div className="relative mb-8">
+                <div className="w-24 h-24 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <Sparkles className="w-8 h-8 text-indigo-500 animate-pulse" />
+                </div>
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Ingesting Intelligence...</h2>
+            <p className="text-slate-500 max-w-sm">AUREM is distilling the content into a structured study environment.</p>
+        </div>
+    );
+
+    // ═══════════════════════════════════════════════
+    // FULL-SCREEN CHAT VIEW
+    // ═══════════════════════════════════════════════
+    const renderChatFullScreen = () => (
+        <div className={`fixed inset-0 z-50 flex flex-col transition-all duration-300
+            ${isDark ? 'bg-midnight-900 text-white' : 'bg-warm-50 text-warm-800'}
+        `}>
+            {/* Chat Header */}
+            <div className={`px-6 py-5 flex items-center justify-between z-30 glass-3d border-b rounded-b-3xl mx-4 mt-4 shrink-0
+                ${isDark ? 'bg-midnight-900/40 border-white/[0.08]' : 'bg-white/40 border-warm-200/50'}
+            `}>
+                <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20">
+                        <BrainCircuit className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                        <h2 className="text-lg font-black tracking-tight bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent uppercase">
+                            Study Assistant
+                        </h2>
+                        <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mt-0.5">
+                            Contextual AI • {fileName || 'Document'}
+                        </p>
+                    </div>
+                </div>
+                <button
+                    onClick={() => setIsChatOpen(false)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all
+                        ${isDark ? 'bg-white/[0.05] hover:bg-white/[0.1] text-white/70' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}
+                    `}
+                >
+                    Hide <ChevronRight className="w-4 h-4" />
+                </button>
+            </div>
+
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-5 custom-scrollbar">
+                {chatMessages.length === 0 && (
+                    <div className="max-w-2xl mx-auto text-center py-20 space-y-6">
+                        <div className="w-20 h-20 mx-auto rounded-[28px] bg-gradient-to-br from-indigo-500/10 to-violet-500/10 flex items-center justify-center">
+                            <Bot className="w-10 h-10 text-indigo-500/40" />
+                        </div>
+                        <div>
+                            <h3 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white/90' : 'text-slate-800'}`}>
+                                Hey, I'm Aurem
+                            </h3>
+                            <p className="text-theme-muted max-w-md mx-auto">
+                                I can work with you on your doc and answer any questions!
+                            </p>
+                        </div>
                     </div>
                 )}
 
-                {/* Tabs */}
-                <div className="flex gap-4 mb-6 shrink-0 sticky top-0 z-20 pt-2 backdrop-blur-md animate-enter opacity-0 delay-200" style={{ animationFillMode: 'forwards' }}>
-                    <button
-                        onClick={() => setActiveTab('tools')}
-                        className={`flex-1 py-4 rounded-2xl font-bold text-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-sm
-                            ${activeTab === 'tools'
-                                ? 'bg-orange-500 text-white shadow-orange-500/20 scale-[1.02]'
-                                : isDark ? 'bg-gray-900 text-gray-500 hover:bg-gray-800' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'}
-                        `}
-                    >
-                        <Sparkles className="w-4 h-4" /> Analysis Tools
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('chat')}
-                        className={`flex-1 py-4 rounded-2xl font-bold text-sm transition-all duration-300 flex items-center justify-center gap-2 shadow-sm
-                            ${activeTab === 'chat'
-                                ? 'bg-orange-500 text-white shadow-orange-500/20 scale-[1.02]'
-                                : isDark ? 'bg-gray-900 text-gray-500 hover:bg-gray-800' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'}
-                        `}
-                    >
-                        <MessageSquare className="w-4 h-4" /> Ask Questions
-                    </button>
-                </div>
-
-                {/* Main Content Area */}
-                <div>
-
-                    {/* Tools Tab */}
-                    {activeTab === 'tools' && (
-                        <div className="space-y-6">
-                            {/* Action Grid - Staggered Animation */}
-                            <div className="grid grid-cols-2 gap-2 md:gap-4">
-                                {[
-                                    { id: 'summarize', label: 'Summarize', icon: FileText },
-                                    { id: 'explain', label: 'Explain', icon: Lightbulb },
-                                    { id: 'test', label: 'Generate Test', icon: Check },
-                                    { id: 'flashcards', label: 'Flashcards', icon: CreditCard, limited: true }
-                                ].map((tool, index) => {
-                                    const remaining = tool.limited && !isPro ? getRemainingUses('flashcards') : null;
-                                    return (
-                                        <button
-                                            key={tool.id}
-                                            onClick={() => handleToolAction(tool.id)}
-                                            disabled={isLoading || !hasContent}
-                                            style={{ animationDelay: `${index * 100 + 300}ms`, animationFillMode: 'forwards' }}
-                                            className={`relative p-6 rounded-3xl border flex flex-col items-center justify-center gap-3 transition-all duration-300 group animate-enter opacity-0
-                                            hover:scale-105 hover:shadow-xl hover:shadow-orange-500/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
-                                            ${isDark
-                                                    ? 'bg-gray-900 border-gray-800 hover:border-orange-500/50 hover:bg-gray-800'
-                                                    : 'bg-white border-gray-200 hover:border-orange-500 hover:shadow-lg'}
-                                        `}
-                                        >
-                                            {remaining !== null && (
-                                                <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${remaining > 0 ? 'bg-orange-500/20 text-orange-500' : 'bg-red-500/20 text-red-500'}`}>
-                                                    {remaining}/3
-                                                </span>
-                                            )}
-                                            <div className={`p-4 rounded-full transition-colors duration-300 ${isDark ? 'bg-gray-800 group-hover:bg-orange-500/20' : 'bg-orange-50 group-hover:bg-orange-100'}`}>
-                                                <tool.icon className={`w-6 h-6 transition-colors ${isDark ? 'text-gray-400 group-hover:text-orange-500' : 'text-orange-500'}`} />
-                                            </div>
-                                            <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400 group-hover:text-white' : 'text-gray-600 group-hover:text-gray-900'}`}>{tool.label}</span>
-                                        </button>
-                                    )
-                                })}
-                            </div>
-
-                            {/* Result Area */}
-                            {isLoading && (
-                                <div className="text-center py-12 animate-enter">
-                                    <Loader2 className="w-10 h-10 text-orange-500 animate-spin mx-auto mb-4" />
-                                    <p className="text-xs font-bold text-orange-500 uppercase tracking-widest animate-pulse">Aurem is analyzing...</p>
-                                </div>
-                            )}
-
-                            {/* Quiz Mode */}
-                            {showQuizMode && quizData && !isLoading && (
-                                <div className={`relative animate-enter w-full max-w-4xl mx-auto pb-20`}>
-
-                                    {/* Quiz Header */}
-                                    <div className="flex items-center justify-between mb-8 p-6 rounded-3xl glass-panel-lighter border border-white/10 shadow-lg">
-                                        <div>
-                                            <h2 className="text-2xl font-black bg-gradient-to-r from-purple-500 to-rose-500 bg-clip-text text-transparent">
-                                                {quizData.title || "Interactive Assessment"}
-                                            </h2>
-                                            <p className="text-sm font-bold text-gray-400 mt-1 uppercase tracking-wider">
-                                                {quizData.questions.length} Questions • AI Generated
-                                            </p>
-                                        </div>
-                                        {quizStep === 'taking' && (
-                                            <button
-                                                onClick={() => {
-                                                    // Calculate Score
-                                                    let correct = 0;
-                                                    let total = 0;
-                                                    const details = quizData.questions.map(q => {
-                                                        const ans = quizAnswers[q.id];
-                                                        const isCorrect = ans === q.correct_answer;
-                                                        if (q.type === 'objective') {
-                                                            total++;
-                                                            if (isCorrect) correct++;
-                                                        }
-                                                        return { ...q, user_answer: ans, is_correct: isCorrect };
-                                                    });
-                                                    setQuizStats({ score: Math.round((correct / total) * 100) || 0, correct, total, details });
-                                                    setQuizStep('result');
-                                                }}
-                                                className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold rounded-xl shadow-lg hover:shadow-green-500/20 hover:scale-105 transition-all"
-                                            >
-                                                Submit Test
-                                            </button>
-                                        )}
-                                        {quizStep === 'result' && (
-                                            <button
-                                                onClick={() => { setShowQuizMode(false); setQuizData(null); }}
-                                                className="px-6 py-3 bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-bold rounded-xl hover:bg-gray-300 dark:hover:bg-gray-700 transition-all"
-                                            >
-                                                Close
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {/* Taking Quiz */}
-                                    {quizStep === 'taking' && (
-                                        <div className="space-y-6">
-                                            {quizData.questions.map((q, i) => (
-                                                <div key={q.id} className={`p-6 md:p-8 rounded-[2rem] border transition-all hover:shadow-xl ${isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-white border-gray-100 shadow-md'}`}>
-                                                    <div className="flex gap-4">
-                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-orange-50 text-orange-500'}`}>
-                                                            {i + 1}
-                                                        </div>
-                                                        <div className="flex-1 space-y-4">
-                                                            <p className={`text-lg font-medium leading-relaxed ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{q.question}</p>
-
-                                                            {q.type === 'objective' && (
-                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                                                                    {q.options.map((opt, idx) => (
-                                                                        <label key={idx} className={`relative flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 group
-                                                                        ${quizAnswers[q.id] === opt
-                                                                                ? 'border-orange-500 bg-orange-500/5'
-                                                                                : isDark ? 'border-gray-800 bg-gray-800/50 hover:border-gray-700' : 'border-gray-100 bg-gray-50 hover:border-gray-200'}
-                                                                    `}>
-                                                                            <input
-                                                                                type="radio"
-                                                                                name={`q-${q.id}`}
-                                                                                checked={quizAnswers[q.id] === opt}
-                                                                                onChange={() => setQuizAnswers({ ...quizAnswers, [q.id]: opt })}
-                                                                                className="hidden"
-                                                                            />
-                                                                            <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center transition-all ${quizAnswers[q.id] === opt ? 'border-orange-500' : 'border-gray-400 group-hover:border-gray-500'}`}>
-                                                                                {quizAnswers[q.id] === opt && <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />}
-                                                                            </div>
-                                                                            <span className={`font-medium ${quizAnswers[q.id] === opt ? 'text-orange-500' : isDark ? 'text-gray-400' : 'text-gray-600'}`}>{opt}</span>
-                                                                        </label>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Result View */}
-                                    {quizStep === 'result' && quizStats && (
-                                        <div className="space-y-8 animate-slide-up">
-                                            {/* Score Card */}
-                                            <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-indigo-900 to-purple-900 p-8 md:p-12 text-center text-white shadow-2xl">
-                                                <div className="relative z-10">
-                                                    <h3 className="text-xl font-bold opacity-80 uppercase tracking-widest mb-6">Your Performance</h3>
-                                                    <div className="flex flex-col items-center">
-                                                        <div className={`w-40 h-40 rounded-full flex items-center justify-center text-6xl font-black bg-white/10 backdrop-blur-md border-4 ${quizStats.score >= 80 ? 'border-emerald-400' : quizStats.score >= 50 ? 'border-amber-400' : 'border-rose-400'} shadow-2xl mb-6`}>
-                                                            {quizStats.score}%
-                                                        </div>
-                                                        <div className="flex gap-8 text-center">
-                                                            <div>
-                                                                <p className="text-4xl font-bold text-emerald-400">{quizStats.correct}</p>
-                                                                <p className="text-xs font-bold opacity-60 uppercase">Correct</p>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-4xl font-bold text-rose-400">{quizStats.total - quizStats.correct}</p>
-                                                                <p className="text-xs font-bold opacity-60 uppercase">Wrong</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/30 rounded-full blur-[80px] -z-0" />
-                                                <div className="absolute bottom-0 left-0 w-64 h-64 bg-indigo-500/30 rounded-full blur-[80px] -z-0" />
-                                            </div>
-
-                                            {/* Detailed Review */}
-                                            <div className="space-y-6">
-                                                <h3 className="text-xl font-bold text-center">Detailed Solutions</h3>
-                                                {quizStats.details.map((q, i) => (
-                                                    <div key={i} className={`p-6 rounded-3xl border ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-                                                        <p className="font-bold text-lg mb-4">{i + 1}. {q.question}</p>
-                                                        <div className="space-y-3 text-sm">
-                                                            <div className={`p-4 rounded-xl flex justify-between items-center ${q.is_correct ? 'bg-green-500/10 text-green-600 border border-green-500/20' : 'bg-red-500/10 text-red-600 border border-red-500/20'}`}>
-                                                                <span className="font-bold opacity-70">YOUR ANSWER</span>
-                                                                <span className="font-bold">{q.user_answer || "Not Attempted"}</span>
-                                                            </div>
-                                                            {!q.is_correct && (
-                                                                <div className="p-4 rounded-xl flex justify-between items-center bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                                                                    <span className="font-bold opacity-70">CORRECT ANSWER</span>
-                                                                    <span className="font-bold">{q.correct_answer}</span>
-                                                                </div>
-                                                            )}
-                                                            <div className={`p-4 rounded-xl ${isDark ? 'bg-gray-800' : 'bg-gray-50'}`}>
-                                                                <p className="opacity-80 leading-relaxed"><span className="font-bold">Explanation:</span> {q.explanation}</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                </div>
-                            )}
-
-                            {/* Interactive Flashcard Mode */}
-                            {showFlashcardMode && flashcards.length > 0 && !isLoading && (
-                                <div className={`p-6 rounded-3xl border animate-enter ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-xl'}`}>
-                                    {/* Flashcard Header */}
-                                    <div className="flex items-center justify-between mb-6">
-                                        <div className="flex items-center gap-3">
-                                            <CreditCard className="w-6 h-6 text-orange-500" />
-                                            <h3 className="font-bold text-lg">Flashcards</h3>
-                                            <span className={`text-sm px-3 py-1 rounded-full ${isDark ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'}`}>
-                                                {currentCardIndex + 1} / {flashcards.length}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-xs text-green-500 font-medium">{masteredCards.size} mastered</span>
-                                            <button
-                                                onClick={shuffleCards}
-                                                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
-                                                title="Shuffle cards"
-                                            >
-                                                <Shuffle className="w-5 h-5 text-gray-500" />
-                                            </button>
-                                            <button
-                                                onClick={() => setShowFlashcardMode(false)}
-                                                className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
-                                            >
-                                                <X className="w-5 h-5 text-gray-500" />
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {/* Progress Bar */}
-                                    <div className="mb-6">
-                                        <div className={`h-2 rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`}>
-                                            <div
-                                                className="h-full bg-gradient-to-r from-orange-500 to-amber-500 rounded-full transition-all duration-300"
-                                                style={{ width: `${((currentCardIndex + 1) / flashcards.length) * 100}%` }}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Flashcard */}
-                                    {currentCard && (
-                                        <div className="mb-6">
-                                            {/* Topic & Difficulty Badge */}
-                                            <div className="flex items-center justify-between mb-4">
-                                                <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                                                    📚 {currentCard.topic || 'General'}
-                                                </span>
-                                                <span className={`text-xs font-bold px-3 py-1 rounded-full ${getDifficultyColor(currentCard.difficulty)}`}>
-                                                    {getDifficultyEmoji(currentCard.difficulty)} {currentCard.difficulty || 'Medium'}
-                                                </span>
-                                            </div>
-
-                                            {/* Card - Flip on Click */}
-                                            <div
-                                                onClick={() => setIsCardFlipped(!isCardFlipped)}
-                                                className={`relative min-h-[200px] p-8 rounded-2xl cursor-pointer transition-all duration-500 transform
-                                                    ${isCardFlipped
-                                                        ? 'bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/30'
-                                                        : 'bg-gradient-to-br from-orange-500/10 to-amber-500/10 border-orange-500/30'}
-                                                    border-2 hover:scale-[1.02] active:scale-[0.98]
-                                                    ${masteredCards.has(currentCard.id) ? 'ring-2 ring-green-500/50' : ''}
-                                                `}
-                                                style={{
-                                                    perspective: '1000px',
-                                                    transformStyle: 'preserve-3d'
-                                                }}
-                                            >
-                                                <div className="flex flex-col items-center justify-center text-center h-full">
-                                                    <span className={`text-xs font-bold uppercase tracking-widest mb-4 ${isCardFlipped ? 'text-green-500' : 'text-orange-500'}`}>
-                                                        {isCardFlipped ? '✅ ANSWER' : '❓ QUESTION'}
-                                                    </span>
-                                                    <p className={`text-lg font-medium leading-relaxed ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                                        {isCardFlipped ? currentCard.answer : currentCard.question}
-                                                    </p>
-                                                    <span className={`mt-6 text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>
-                                                        {isCardFlipped ? 'Click to see question' : 'Click to reveal answer'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Navigation & Actions */}
-                                    <div className="flex items-center justify-between">
-                                        <button
-                                            onClick={prevCard}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-colors
-                                                ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
-                                        >
-                                            <ChevronLeft className="w-4 h-4" /> Previous
-                                        </button>
-
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => toggleMastered(currentCard?.id)}
-                                                className={`px-4 py-2 rounded-xl font-medium transition-all
-                                                    ${masteredCards.has(currentCard?.id)
-                                                        ? 'bg-green-500 text-white'
-                                                        : isDark ? 'bg-gray-800 hover:bg-green-500/20 text-gray-300' : 'bg-gray-100 hover:bg-green-100 text-gray-700'
-                                                    }`}
-                                            >
-                                                {masteredCards.has(currentCard?.id) ? '✓ Mastered' : 'Mark Mastered'}
-                                            </button>
-                                        </div>
-
-                                        <button
-                                            onClick={nextCard}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium transition-colors
-                                                ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
-                                        >
-                                            Next <ChevronRight className="w-4 h-4" />
-                                        </button>
-                                    </div>
-
-                                    {/* Card Dots Navigation */}
-                                    <div className="flex justify-center gap-1 mt-6 flex-wrap">
-                                        {flashcards.map((card, idx) => (
-                                            <button
-                                                key={idx}
-                                                onClick={() => { setCurrentCardIndex(idx); setIsCardFlipped(false); }}
-                                                className={`w-3 h-3 rounded-full transition-all
-                                                    ${idx === currentCardIndex
-                                                        ? 'bg-orange-500 scale-125'
-                                                        : masteredCards.has(card.id)
-                                                            ? 'bg-green-500'
-                                                            : isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-300 hover:bg-gray-400'
-                                                    }`}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Regular Text Result (non-flashcard) */}
-                            {result && !isLoading && !showFlashcardMode && (
-                                <div className={`relative p-8 rounded-3xl border animate-enter ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-xl'}`}>
-                                    <button onClick={copyToClipboard} className="absolute top-6 right-6 p-2 rounded-lg hover:bg-gray-500/10 transition-colors">
-                                        {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-gray-500" />}
-                                    </button>
-                                    <div className={`prose max-w-none prose-p:leading-relaxed text-sm md:text-base ${isDark ? 'prose-invert' : ''}`}>
-                                        <React.Fragment>
-                                            {/* Enhanced markdown-like formatting */}
-                                            {result.split('\n').map((line, i) => {
-                                                // Handle headers
-                                                if (line.startsWith('## ')) {
-                                                    return <h2 key={i} className={`text-lg font-bold mt-6 mb-2 ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>{line.replace('## ', '')}</h2>;
-                                                }
-                                                if (line.startsWith('### ')) {
-                                                    return <h3 key={i} className={`text-md font-bold mt-4 mb-2 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{line.replace('### ', '')}</h3>;
-                                                }
-                                                if (line.startsWith('# ')) {
-                                                    return <h1 key={i} className={`text-xl font-black mt-6 mb-3 ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>{line.replace('# ', '')}</h1>;
-                                                }
-                                                // Handle bold text with **
-                                                if (line.includes('**')) {
-                                                    const parts = line.split(/\*\*(.+?)\*\*/g);
-                                                    return (
-                                                        <p key={i} className={`my-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                            {parts.map((part, j) =>
-                                                                j % 2 === 1 ? <strong key={j} className="font-bold">{part}</strong> : part
-                                                            )}
-                                                        </p>
-                                                    );
-                                                }
-                                                // Handle bullet points
-                                                if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
-                                                    return (
-                                                        <div key={i} className={`flex gap-2 my-1 ml-4 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                            <span className="text-orange-500">•</span>
-                                                            <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
-                                                        </div>
-                                                    );
-                                                }
-                                                // Regular paragraph
-                                                if (line.trim()) {
-                                                    return <p key={i} className={`my-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{line}</p>;
-                                                }
-                                                return <div key={i} className="h-2" />;
-                                            })}
-                                        </React.Fragment>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Chat Tab */}
-                    {activeTab === 'chat' && (
-                        <div className={`flex flex-col h-[600px] rounded-3xl border overflow-hidden animate-enter opacity-0 delay-300 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`} style={{ animationFillMode: 'forwards' }}>
-                            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-                                {chatMessages.length === 0 && (
-                                    <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-50">
-                                        <Bot className="w-12 h-12 mb-3" />
-                                        <p className="text-sm font-medium">Start asking questions about your content</p>
+                {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`flex flex-col max-w-[85%] sm:max-w-[70%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                            <div className="flex items-center mb-1.5 px-1 gap-2">
+                                {msg.role === 'model' && (
+                                    <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+                                        <Sparkles className="w-3 h-3 text-white" />
                                     </div>
                                 )}
-                                {chatMessages.map((msg, i) => (
-                                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-message`}>
-                                        <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
-                                            ? 'bg-orange-500 text-white rounded-br-none'
-                                            : isDark ? 'bg-gray-800 text-gray-200 rounded-tl-none' : 'bg-gray-100 text-gray-800 rounded-tl-none'
-                                            }`}>
-                                            {msg.role === 'user' ? msg.text : (
-                                                <div className="space-y-1">
-                                                    {msg.text.split('\n').map((line, idx) => {
-                                                        if (line.startsWith('## ')) {
-                                                            return <h2 key={idx} className={`text-md font-bold mt-3 mb-1 ${isDark ? 'text-orange-400' : 'text-orange-600'}`}>{line.replace('## ', '')}</h2>;
-                                                        }
-                                                        if (line.startsWith('### ')) {
-                                                            return <h3 key={idx} className={`text-sm font-bold mt-2 mb-1 ${isDark ? 'text-amber-400' : 'text-amber-500'}`}>{line.replace('### ', '')}</h3>;
-                                                        }
-                                                        if (line.includes('**')) {
-                                                            const parts = line.split(/\*\*(.+?)\*\*/g);
-                                                            return (
-                                                                <p key={idx} className="my-1 text-[14px]">
-                                                                    {parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-bold text-orange-500">{p}</strong> : p)}
-                                                                </p>
-                                                            );
-                                                        }
-                                                        if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
-                                                            return (
-                                                                <div key={idx} className="flex gap-2 my-0.5 ml-2 text-[14px]">
-                                                                    <span className="text-orange-500">•</span>
-                                                                    <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        if (line.trim()) {
-                                                            return <p key={idx} className="my-1 text-[14px]">{line}</p>;
-                                                        }
-                                                        return <div key={idx} className="h-1" />;
-                                                    })}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                                {isChatLoading && (
-                                    <div className="flex justify-start animate-message">
-                                        <div className={`p-4 rounded-2xl rounded-tl-none flex items-center gap-2 ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                            <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
-                                            <span className="text-xs font-bold text-gray-500">Thinking...</span>
-                                        </div>
-                                    </div>
-                                )}
-                                <div ref={chatEndRef} />
+                                <span className={`text-[10px] font-bold uppercase tracking-wider ${msg.role === 'user' ? 'text-theme-muted' : 'text-indigo-500'}`}>
+                                    {msg.role === 'user' ? 'You' : 'Aurem'}
+                                </span>
                             </div>
-
-                            <form onSubmit={handleChatSubmit} className={`p-4 border-t ${isDark ? 'border-gray-800 bg-gray-950' : 'border-gray-100 bg-gray-50'}`}>
-                                <div className="relative">
-                                    <input
-                                        value={chatInput}
-                                        onChange={e => setChatInput(e.target.value)}
-                                        placeholder="Ask a question..."
-                                        className={`w-full pl-6 pr-14 py-4 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all
-                                            ${isDark ? 'bg-gray-900 text-white placeholder-gray-600' : 'bg-white text-gray-900 placeholder-gray-400 shadow-sm'}
-                                        `}
-                                    />
-                                    <button
-                                        type="submit"
-                                        disabled={isChatLoading || !chatInput.trim()}
-                                        className="absolute right-2 top-2 bottom-2 aspect-square bg-orange-500 rounded-xl flex items-center justify-center text-white hover:bg-orange-600 transition-colors disabled:opacity-50"
-                                    >
-                                        <Send className="w-5 h-5" />
-                                    </button>
-                                </div>
-                            </form>
+                            <div className={`relative p-5 sm:p-6 rounded-[24px] transition-all duration-300 glass-3d glow-border
+                                ${msg.role === 'user'
+                                    ? 'bg-gradient-to-br from-indigo-600 to-violet-700 text-white rounded-tr-sm shadow-xl shadow-indigo-500/20'
+                                    : `${isDark ? 'bg-white/[0.03] border border-white/[0.08]' : 'bg-white/90 border border-warm-200/50'} rounded-tl-sm`
+                                }
+                            `}>
+                                {msg.role === 'user' ? (
+                                    <div className="whitespace-pre-wrap text-[14px] leading-relaxed">{msg.text}</div>
+                                ) : (
+                                    <MarkdownRenderer text={msg.text} isDark={isDark} />
+                                )}
+                            </div>
                         </div>
-                    )}
+                    </div>
+                ))}
 
-                </div>
+                {isActionLoading && (
+                    <div className="flex justify-start pl-1">
+                        <div className={`p-5 rounded-[24px] glass-3d ${isDark ? 'bg-white/[0.03] border border-white/[0.08]' : 'bg-white/90 border border-warm-200/50'}`}>
+                            <div className="flex items-center gap-3">
+                                <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                                <span className="text-sm text-theme-muted">Analyzing...</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                <div ref={chatEndRef} />
+            </div>
+
+            {/* Chat Input */}
+            <div className={`px-6 py-5 border-t shrink-0 ${isDark ? 'border-white/[0.04] bg-midnight-900/80' : 'border-warm-200/30 bg-warm-50/80'} backdrop-blur-xl`}>
+                <form onSubmit={handleChatSubmit} className="max-w-3xl mx-auto relative">
+                    <input
+                        type="text"
+                        value={chatInput}
+                        onChange={e => setChatInput(e.target.value)}
+                        placeholder="Type a question here or ask about the document..."
+                        disabled={isActionLoading}
+                        className={`w-full py-3.5 pl-5 pr-12 rounded-2xl text-[14px] font-medium outline-none transition-all duration-200
+                            ${isDark
+                                ? 'bg-midnight-700/50 text-white placeholder:text-white/25 border border-white/[0.06] focus:border-indigo-500/40 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.08)]'
+                                : 'bg-white/70 text-warm-800 placeholder:text-warm-400 border border-warm-300/25 focus:border-indigo-400/40 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.06)]'
+                            }
+                        `}
+                    />
+                    <button
+                        type="submit"
+                        disabled={isActionLoading || !chatInput.trim()}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 disabled:opacity-30 text-white rounded-xl shadow-md transition-all active:scale-95"
+                    >
+                        <Send className="w-4 h-4" />
+                    </button>
+                </form>
             </div>
         </div>
     );
+
+    // ═══════════════════════════════════════════════
+    // STUDY MODE
+    // ═══════════════════════════════════════════════
+    const renderStudyMode = () => (
+        <div className="h-full flex overflow-hidden">
+            {/* Sidebar */}
+            <aside className={`flex flex-col border-r transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-72'} ${isDark ? 'bg-slate-900/80 border-white/[0.04]' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="p-6 flex items-center justify-between">
+                    {!isSidebarCollapsed && <span className="font-bold text-indigo-500 uppercase tracking-widest text-xs">Aurem Lens</span>}
+                    <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 hover:bg-slate-400/10 rounded-lg">
+                        <MenuIcon className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <nav className="flex-1 px-3 space-y-2">
+                    {[
+                        { id: 'notes', label: 'Detailed Notes', icon: FileText },
+                        { id: 'summaries', label: 'Executive Summary', icon: Layers },
+                        { id: 'cards', label: 'Flashcards & Maps', icon: CreditCard },
+                        { id: 'quiz', label: 'Quiz & Assessment', icon: Trophy }
+                    ].map(item => (
+                        <button
+                            key={item.id}
+                            onClick={() => setActiveSection(item.id)}
+                            className={`w-full flex items-center gap-3 p-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all duration-300
+                                ${activeSection === item.id
+                                    ? 'bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/20 scale-[1.02]'
+                                    : 'text-theme-muted hover:text-indigo-500 hover:bg-white/5'}
+                                ${isSidebarCollapsed ? 'justify-center px-0' : ''}
+                            `}
+                        >
+                            <item.icon className="w-5 h-5 shrink-0" />
+                            {!isSidebarCollapsed && <span>{item.label}</span>}
+                        </button>
+                    ))}
+                </nav>
+
+                <div className={`p-4 mt-auto border-t ${isDark ? 'border-white/[0.04]' : 'border-slate-200'}`}>
+                    <button onClick={() => setViewMode('input')} className="w-full flex items-center gap-3 p-3 text-slate-500 hover:text-red-400 font-bold text-sm">
+                        <ChevronLeft className="w-4 h-4" />
+                        {!isSidebarCollapsed && <span>New Session</span>}
+                    </button>
+                </div>
+            </aside>
+
+            {/* Main Content */}
+            <main className={`flex-1 flex flex-col overflow-hidden ${isDark ? 'bg-midnight-900' : 'bg-warm-50'}`}>
+                <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar">
+                    <div className="max-w-4xl mx-auto w-full">
+
+                        {/* Notes Section */}
+                        {activeSection === 'notes' && (
+                            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className={`rounded-[32px] border p-8 md:p-12 glass-3d
+                                    ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-white border-warm-200/50 shadow-sm'}
+                                `}>
+                                    <MarkdownRenderer text={notes} isDark={isDark} />
+                                </div>
+
+                                {/* Phase 7: Mastery Progression Gate */}
+                                {masteryLevel !== 'Advanced' && (
+                                    <div className={`mt-12 p-8 md:p-12 border rounded-[32px] text-center glass-3d animate-in slide-in-from-bottom-8 ${isDark ? 'border-indigo-500/20 bg-indigo-500/5' : 'border-indigo-200 bg-indigo-50'}`}>
+                                        <h4 className="text-2xl font-black text-indigo-500 mb-2">Ready to Level Up?</h4>
+                                        <p className={`${isDark ? 'text-slate-400' : 'text-slate-600'} mb-8 font-medium max-w-lg mx-auto`}>You are currently viewing <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{masteryLevel}</span> notes. Pass the required assessment to unlock deeper concepts.</p>
+                                        <button
+                                            onClick={() => {
+                                                setActiveSection('quiz');
+                                                if (!quizData) generateSpecificTool('quiz');
+                                            }}
+                                            className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-violet-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-500/20 hover:scale-105 transition-all text-lg"
+                                        >
+                                            Take {masteryLevel} Assessment
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Summaries Section */}
+                        {activeSection === 'summaries' && (
+                            <div className="animate-in fade-in duration-500">
+                                <div className={`rounded-[32px] border p-8 md:p-12 glass-3d
+                                    ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-white border-warm-200/50 shadow-sm'}
+                                `}>
+                                    <MarkdownRenderer text={summary} isDark={isDark} />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Flashcards & Mindmaps */}
+                        {activeSection === 'cards' && (
+                            <div className="max-w-5xl mx-auto space-y-12 pb-12 animate-in fade-in duration-500">
+                                {!flashcards.length && !isActionLoading && (
+                                    <div className={`text-center py-20 border-2 border-dashed rounded-3xl ${isDark ? 'border-white/[0.08]' : 'border-slate-200'}`}>
+                                        <CreditCard className="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                                        <h3 className="text-xl font-bold mb-4">No Learning Assets Yet</h3>
+                                        <button
+                                            onClick={() => generateSpecificTool('cards')}
+                                            className="px-8 py-3 bg-gradient-to-r from-indigo-500 to-violet-600 text-white font-bold rounded-2xl shadow-lg shadow-indigo-500/20"
+                                        >
+                                            Generate Flashcards
+                                        </button>
+                                    </div>
+                                )}
+
+                                {isActionLoading && activeSection === 'cards' && (
+                                    <div className="py-20 text-center space-y-4">
+                                        <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mx-auto" />
+                                        <p className="font-bold text-slate-500">Developing Flashcards & Mindmap...</p>
+                                    </div>
+                                )}
+
+                                {flashcards.length > 0 && (
+                                    <div className="space-y-12">
+                                        <section>
+                                            <div className="flex justify-between items-center mb-6">
+                                                <h3 className="text-lg font-bold">Interactive Flashcards</h3>
+                                                <span className="text-xs text-slate-500 uppercase font-bold tracking-widest">{flashcards.length} Cards Generated</span>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                {flashcards.map((card, i) => (
+                                                    <Flashcard key={i} card={card} isDark={isDark} />
+                                                ))}
+                                            </div>
+                                        </section>
+
+                                        <section className={`${isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-white border-slate-200'} border rounded-3xl overflow-hidden shadow-depth`}>
+                                            <div className={`p-8 border-b flex justify-between items-center ${isDark ? 'border-white/[0.06]' : 'border-slate-200'}`}>
+                                                <div>
+                                                    <h3 className="text-lg font-bold">Visual Mind Map</h3>
+                                                    <p className="text-slate-500 text-sm">Spatial representation of core concepts</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => generateSpecificTool('mindmap')}
+                                                    className={`px-4 py-2 font-bold rounded-xl text-xs transition-colors ${isDark ? 'bg-white/[0.05] text-slate-300 hover:bg-white/[0.1]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                                >
+                                                    Regenerate
+                                                </button>
+                                            </div>
+                                            <div className="h-[500px] w-full">
+                                                {mindMapData ? (
+                                                    <MindMapViewer data={mindMapData} />
+                                                ) : (
+                                                    <div className="h-full flex items-center justify-center text-slate-700 font-bold italic">
+                                                        Click 'Regenerate' to visualize concepts
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </section>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Quiz & Assessment Section */}
+                        {activeSection === 'quiz' && (
+                            <div className="max-w-4xl mx-auto h-full animate-in fade-in duration-500">
+                                {!quizData && !isActionLoading && (
+                                    <div className="text-center py-20">
+                                        <Trophy className="w-16 h-16 text-yellow-500/20 mx-auto mb-6" />
+                                        <h3 className="text-2xl font-bold mb-4">Test Your Mastery</h3>
+                                        <p className="text-slate-500 mb-8 max-w-md mx-auto">Generate a custom-built quiz based on the document's complex points to identify your gaps.</p>
+
+                                        {quizError && (
+                                            <div className="max-w-md mx-auto mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-left">
+                                                <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                                                <p className="text-red-400 text-sm leading-relaxed">{quizError}</p>
+                                            </div>
+                                        )}
+
+                                        <button
+                                            onClick={() => { setQuizError(null); generateSpecificTool('quiz'); }}
+                                            className="px-10 py-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-3xl shadow-xl shadow-amber-500/20 hover:scale-105 transition-all"
+                                        >
+                                            {quizError ? 'Retry Assessment' : 'Start Assessment'}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {isActionLoading && activeSection === 'quiz' && (
+                                    <div className="py-20 text-center space-y-4">
+                                        <RefreshCw className="w-10 h-10 text-amber-500 animate-spin mx-auto" />
+                                        <p className="font-bold text-slate-500 tracking-widest">BUILDING ADAPTIVE QUIZ...</p>
+                                    </div>
+                                )}
+
+                                {quizData && (
+                                    <div className="h-full relative">
+                                        <MasteryLoop
+                                            initialQuiz={quizData}
+                                            topic={fileName}
+                                            onMastery={(results) => {
+                                                console.log("Mastery Achieved", results);
+                                                setIsLevelUnlocked(true);
+                                            }}
+                                        />
+
+                                        {/* Inject Next Level trigger if they score >= 60 in MasteryLoop */}
+                                        {masteryLevel !== 'Advanced' && isLevelUnlocked && (
+                                            <div className="mt-8 text-center animate-in fade-in duration-700 delay-500">
+                                                <p className="text-sm font-bold text-emerald-500 mb-4 uppercase tracking-widest">Mastery Achieved</p>
+                                                <button
+                                                    onClick={handleLevelUp}
+                                                    className="px-10 py-4 bg-emerald-500 text-white font-black rounded-3xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-500/30 w-full"
+                                                >
+                                                    UNLOCK {masteryLevel === 'Beginner' ? 'INTERMEDIATE' : 'ADVANCED'} NOTES
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </main>
+
+            {/* Floating Chat Toggle */}
+            <button
+                onClick={() => setIsChatOpen(true)}
+                className="fixed bottom-8 right-8 z-40 p-4 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-2xl shadow-2xl shadow-indigo-500/30 hover:scale-110 active:scale-95 transition-all duration-300 group"
+                title="Open Study Assistant"
+            >
+                <MessageSquare className="w-6 h-6 group-hover:rotate-12 transition-transform" />
+            </button>
+
+            {/* Full-screen Chat Overlay */}
+            {isChatOpen && renderChatFullScreen()}
+        </div>
+    );
+
+    return (
+        <div className={`h-full ${isDark ? 'bg-midnight-900 text-white' : 'bg-warm-50 text-slate-900'} transition-colors duration-300 font-sans`}>
+            {viewMode === 'input' && renderInputView()}
+            {viewMode === 'loading' && renderLoadingView()}
+            {viewMode === 'study' && renderStudyMode()}
+        </div>
+    );
 };
+
+const MenuIcon = ({ className }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <line x1="4" x2="20" y1="12" y2="12" /><line x1="4" x2="20" y1="6" y2="6" /><line x1="4" x2="20" y1="18" y2="18" />
+    </svg>
+);
 
 export default DocumentStudy;

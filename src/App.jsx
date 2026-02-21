@@ -2,142 +2,233 @@ import React, { useState, useEffect } from 'react';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SubscriptionProvider, useSubscription } from './contexts/SubscriptionContext';
+import { LearnLoopProvider, useLearnLoop } from './contexts/LearnLoopContext';
 import SplashScreen from './components/SplashScreen';
 import Sidebar from './components/Sidebar';
 import DoubtSolver from './components/DoubtSolver';
 import CollegeCompass from './components/CollegeCompass';
 import DocumentStudy from './components/DocumentStudy';
 import PodcastGenerator from './components/PodcastGenerator';
+import VideoGenerator from './components/VideoGenerator';
 import QuizAssessment from './components/QuizAssessment';
 import UpgradeModal from './components/UpgradeModal';
 import Login from './components/Login';
 import Signup from './components/Signup';
-import { Bot, GraduationCap, FileText, Menu, LogIn, FilePlus, Mic, Sparkles, ClipboardList } from './components/Icons';
+import Settings from './components/Settings';
+import { Bot, GraduationCap, FileText, Menu, LogIn, FilePlus, Mic, Sparkles, ClipboardList, Settings as SettingsIcon, RefreshCw, Video, Eye, Trophy } from './components/Icons';
 import { useRetryableFetch } from './utils/api';
 import SamplePaperGenerator from './components/SamplePaperGenerator';
+import LoopManager from './components/LearnLoop/LoopManager';
+import LandingPageV2 from './components/LandingPageV2';
+import ExamHub from './components/ExamHub';
+import ErrorBoundary from './components/ErrorBoundary';
+
+// Floating particles background
+const FloatingParticles = () => (
+    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        {Array.from({ length: 6 }, (_, i) => (
+            <div
+                key={i}
+                className="absolute rounded-full bg-indigo-500/[0.03]"
+                style={{
+                    width: `${150 + i * 60}px`,
+                    height: `${150 + i * 60}px`,
+                    top: `${10 + i * 15}%`,
+                    left: `${5 + i * 16}%`,
+                    filter: `blur(${60 + i * 15}px)`,
+                    animation: `globalFloat ${12 + i * 3}s ease-in-out infinite`,
+                    animationDelay: `${-i * 2}s`,
+                }}
+            />
+        ))}
+    </div>
+);
 
 const AppContent = () => {
     const { isDark } = useTheme();
     const { currentUser, logout } = useAuth();
-    const [currentView, setCurrentView] = useState('doubt-solver');
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
     const { retryableFetch } = useRetryableFetch();
+    const { activeLoop } = useLearnLoop();
 
-    useEffect(() => {
-        setTimeout(() => setIsLoading(false), 3000);
-    }, []);
+    // ═══ FLOW STATE ═══
+    // Phase: 'splash' → 'landing'/'login'/'app' → ...
+    const [phase, setPhase] = useState('splash');
+    const [currentView, setCurrentView] = useState('doubt-solver');
 
-    useEffect(() => {
+    const hasVisited = localStorage.getItem('hasVisited') === 'true';
+
+    // Initial splash completes
+    const handleSplashComplete = () => {
         if (currentUser) {
-            setCurrentView('doubt-solver');
+            setPhase('app');
         } else {
-            setCurrentView('login');
+            // Force landing page for now to ensure user sees the new overhaul
+            setPhase('landing');
         }
-    }, [currentUser]);
+    };
+
+    // Landing page "Get Started" clicked
+    const handleGetStarted = () => {
+        localStorage.setItem('hasVisited', 'true');
+        setPhase('splash-to-login');
+    };
+
+    // Second splash completes (after landing)
+    const handleSecondSplashComplete = () => {
+        setPhase('login');
+    };
+
+    // After successful auth, currentUser changes
+    useEffect(() => {
+        if (currentUser && (phase === 'login' || phase === 'signup')) {
+            setPhase('app');
+            setCurrentView('doubt-solver');
+        }
+    }, [currentUser, phase]);
+
+    useEffect(() => {
+        if (activeLoop && activeLoop.isActive) {
+            setCurrentView('learn-loop');
+        }
+    }, [activeLoop]);
 
     const handleLogout = async () => {
         await logout();
-        setCurrentView('login');
+        setPhase('login');
     };
 
     const renderContent = () => {
         switch (currentView) {
-            case 'login':
-                return <Login onSwitchToSignup={() => setCurrentView('signup')} />;
-            case 'signup':
-                return <Signup onSwitchToLogin={() => setCurrentView('login')} />;
-            case 'doubt-solver':
-                return <DoubtSolver retryableFetch={retryableFetch} />;
-            case 'document-study':
-                return <DocumentStudy retryableFetch={retryableFetch} />;
-            case 'college-compass':
-                return <CollegeCompass retryableFetch={retryableFetch} />;
-            case 'podcast-generator':
-                return <PodcastGenerator retryableFetch={retryableFetch} />;
-            case 'quiz-assessment':
-                return <QuizAssessment retryableFetch={retryableFetch} onNavigate={setCurrentView} />;
-            case 'sample-paper':
-                return <SamplePaperGenerator retryableFetch={retryableFetch} />;
-            default:
-                return <DoubtSolver retryableFetch={retryableFetch} />;
+            case 'settings': return <Settings />;
+            case 'learn-loop': return <LoopManager />;
+            case 'doubt-solver': return <DoubtSolver retryableFetch={retryableFetch} />;
+            case 'document-study': return <DocumentStudy retryableFetch={retryableFetch} />;
+            case 'college-compass': return <CollegeCompass retryableFetch={retryableFetch} />;
+            case 'podcast-generator': return <PodcastGenerator retryableFetch={retryableFetch} />;
+            case 'video-generator': return <VideoGenerator />;
+            case 'quiz-assessment': return <QuizAssessment retryableFetch={retryableFetch} onNavigate={setCurrentView} />;
+            case 'sample-paper': return <SamplePaperGenerator retryableFetch={retryableFetch} />;
+            case 'exam-hub': return <ExamHub />;
+            default: return <DoubtSolver retryableFetch={retryableFetch} />;
         }
     };
 
     const getHeaderTitle = () => {
-        switch (currentView) {
-            case 'login': return 'Sign In';
-            case 'signup': return 'Create Account';
-            case 'doubt-solver': return 'Doubt Solver';
-            case 'document-study': return 'Aurem Lens';
-            case 'college-compass': return 'College Compass';
-            case 'podcast-generator': return 'Podcast Studio';
-            case 'quiz-assessment': return 'Quiz & Assessment';
-            case 'sample-paper': return 'Smart Paper Generator';
-            default: return 'Aurem';
-        }
+        const titles = {
+            'settings': 'Settings',
+            'learn-loop': 'Learn Loop',
+            'doubt-solver': 'Doubt Solver',
+            'document-study': 'Aurem Lens',
+            'college-compass': 'College Compass',
+            'podcast-generator': 'Podcast Studio',
+            'video-generator': 'AI Video Studio',
+            'quiz-assessment': 'Quiz & Assessment',
+            'sample-paper': 'Smart Paper Generator',
+            'exam-hub': 'Competitive Hub',
+        };
+        return titles[currentView] || 'Aurem';
     };
 
     const getHeaderIcon = () => {
-        switch (currentView) {
-            case 'login':
-            case 'signup': return <LogIn className="w-5 h-5 mr-2 text-theme-primary" />;
-            case 'doubt-solver': return <Bot className="w-5 h-5 mr-2 text-indigo-500" />;
-            case 'document-study': return <FilePlus className="w-5 h-5 mr-2 text-orange-500" />;
-            case 'college-compass': return <GraduationCap className="w-5 h-5 mr-2 text-sky-500" />;
-            case 'podcast-generator': return <Mic className="w-5 h-5 mr-2 text-rose-500" />;
-            case 'quiz-assessment': return <ClipboardList className="w-5 h-5 mr-2 text-emerald-500" />;
-            case 'sample-paper': return <FileText className="w-5 h-5 mr-2 text-purple-600" />;
-            default: return <Sparkles className="w-5 h-5 mr-2 text-orange-500" />;
-        }
+        const iconMap = {
+            'settings': <SettingsIcon className="w-5 h-5 mr-2 text-theme-muted" />,
+            'learn-loop': <RefreshCw className="w-5 h-5 mr-2 text-violet-500" />,
+            'doubt-solver': <Bot className="w-5 h-5 mr-2 text-violet-500" />,
+            'document-study': <Eye className="w-5 h-5 mr-2 text-amber-500" />,
+            'college-compass': <GraduationCap className="w-5 h-5 mr-2 text-cyan-500" />,
+            'podcast-generator': <Mic className="w-5 h-5 mr-2 text-rose-500" />,
+            'video-generator': <Video className="w-5 h-5 mr-2 text-fuchsia-500" />,
+            'quiz-assessment': <ClipboardList className="w-5 h-5 mr-2 text-emerald-500" />,
+            'sample-paper': <FileText className="w-5 h-5 mr-2 text-purple-500" />,
+            'exam-hub': <Trophy className="w-5 h-5 mr-2 text-yellow-500" />,
+        };
+        return iconMap[currentView] || <Sparkles className="w-5 h-5 mr-2 text-amber-500" />;
     };
 
+    // ═══ RENDER PHASES ═══
+
+    // Initial splash
+    if (phase === 'splash') {
+        return <SplashScreen onComplete={handleSplashComplete} />;
+    }
+
+    // Landing page (new users)
+    if (phase === 'landing') {
+        return <LandingPageV2 onGetStarted={handleGetStarted} />;
+    }
+
+    // Second splash (after landing → before login)
+    if (phase === 'splash-to-login') {
+        return <SplashScreen onComplete={handleSecondSplashComplete} />;
+    }
+
+    // Login
+    if (phase === 'login') {
+        return <Login onSwitchToSignup={() => setPhase('signup')} />;
+    }
+
+    // Signup
+    if (phase === 'signup') {
+        return <Signup onSwitchToLogin={() => setPhase('login')} />;
+    }
+
+    // ═══ MAIN APP ═══
     return (
-        <div className={`flex h-screen bg-theme-primary font-sans overflow-hidden transition-colors duration-300 selection:bg-orange-500/30`}>
-            {/* Decorative blurs - Aurem theme */}
-            <div className="fixed inset-0 z-0 opacity-30 pointer-events-none">
-                <div className={`absolute top-0 left-0 w-[500px] h-[500px] rounded-full blur-[128px] -translate-x-1/3 -translate-y-1/3 ${isDark ? 'bg-amber-600' : 'bg-amber-300'}`}></div>
-                <div className={`absolute bottom-0 right-0 w-[500px] h-[500px] rounded-full blur-[128px] translate-x-1/3 translate-y-1/3 ${isDark ? 'bg-rose-600' : 'bg-rose-300'}`}></div>
+        <div className={`flex h-screen font-sans overflow-hidden transition-colors duration-500
+            ${isDark ? 'bg-midnight-900' : 'bg-warm-50'}
+        `}>
+            {/* Global floating particles */}
+            <FloatingParticles />
+
+            {/* Aurora background */}
+            <div className="aurora-bg">
+                <div className="blob"></div>
             </div>
 
-            {isLoading && <SplashScreen onComplete={() => setIsLoading(false)} />}
-
-            {/* Upgrade Modal */}
             <UpgradeModal />
 
-            {currentUser && (
-                <Sidebar
-                    currentView={currentView}
-                    setCurrentView={setCurrentView}
-                    isSidebarOpen={isSidebarOpen}
-                    setIsSidebarOpen={setIsSidebarOpen}
-                    isCollapsed={isCollapsed}
-                    setIsCollapsed={setIsCollapsed}
-                    user={currentUser}
-                    onLogin={() => setCurrentView('login')}
-                    onLogout={handleLogout}
-                />
-            )}
+            <Sidebar
+                currentView={currentView}
+                setCurrentView={setCurrentView}
+                isSidebarOpen={isSidebarOpen}
+                setIsSidebarOpen={setIsSidebarOpen}
+                isCollapsed={isCollapsed}
+                setIsCollapsed={setIsCollapsed}
+                user={currentUser}
+                onLogin={() => setPhase('login')}
+                onLogout={handleLogout}
+            />
 
             <div className={`
-                flex-1 flex flex-col h-full relative z-10 transition-all duration-300
-                ${currentUser ? 'md:my-[2vh] md:mr-[2vh] md:rounded-3xl md:border md:border-white/10 md:shadow-2xl overflow-hidden md:glass-panel' : ''}
+                flex-1 flex flex-col h-full relative z-10 transition-all duration-500
+                md:my-[2vh] md:mr-[2vh] md:rounded-3xl overflow-hidden
+                ${isDark
+                    ? 'md:bg-midnight-800/50 md:border md:border-white/[0.04]'
+                    : 'md:bg-white/40 md:border md:border-warm-300/25'
+                }
+                md:shadow-depth md:backdrop-blur-xl
             `}>
-                {currentUser && (
-                    <header className="md:hidden glass-panel p-4 pt-12 shadow-xl flex items-center z-30 sticky top-0 border-b border-white/5">
-                        <button onClick={() => setIsSidebarOpen(true)} className="mr-3 text-theme-muted hover:text-theme-primary">
-                            <Menu className="w-5 h-5" />
-                        </button>
-                        <h1 className="font-bold text-theme-primary flex items-center">
-                            {getHeaderIcon()}
-                            {getHeaderTitle()}
-                        </h1>
-                    </header>
-                )}
+                {/* Mobile Header */}
+                <header className={`md:hidden p-4 pt-12 shadow-sm flex items-center z-30 sticky top-0
+                    ${isDark
+                        ? 'bg-midnight-900/90 border-b border-white/[0.04]'
+                        : 'bg-warm-50/90 border-b border-warm-300/25'
+                    }
+                    backdrop-blur-xl
+                `}>
+                    <button onClick={() => setIsSidebarOpen(true)} className="mr-3 text-theme-muted hover:text-theme-primary transition-colors">
+                        <Menu className="w-5 h-5" />
+                    </button>
+                    <h1 className={`font-display font-bold flex items-center ${isDark ? 'text-white' : 'text-warm-800'}`}>
+                        {getHeaderIcon()}
+                        {getHeaderTitle()}
+                    </h1>
+                </header>
 
-                <main className="flex-1 overflow-hidden relative">
-                    <div key={currentView} className="h-full animate-view-transition">
+                <main className="flex-1 overflow-y-auto relative">
+                    <div key={currentView} className="h-full animate-page-enter">
                         {renderContent()}
                     </div>
                 </main>
@@ -146,16 +237,14 @@ const AppContent = () => {
     );
 };
 
-// Inner component that can safely use useAuth (it's inside AuthProvider)
 const AuthGate = () => {
     const { currentUser, loading } = useAuth();
-
-    // Show splash while Firebase is checking auth state
-    if (loading) {
-        return <SplashScreen />;
-    }
-
-    return <AppContent />;
+    if (loading) return <SplashScreen />;
+    return (
+        <ErrorBoundary>
+            <AppContent />
+        </ErrorBoundary>
+    );
 };
 
 const App = () => {
@@ -163,7 +252,9 @@ const App = () => {
         <ThemeProvider>
             <AuthProvider>
                 <SubscriptionProvider>
-                    <AuthGate />
+                    <LearnLoopProvider>
+                        <AuthGate />
+                    </LearnLoopProvider>
                 </SubscriptionProvider>
             </AuthProvider>
         </ThemeProvider>
@@ -171,4 +262,3 @@ const App = () => {
 };
 
 export default App;
-

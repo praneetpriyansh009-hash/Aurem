@@ -18,7 +18,7 @@ if %errorlevel% neq 0 (
 if not exist "node_modules\" (
     echo [STATUS] node_modules folder is missing. Installing dependencies now...
     echo (This will take a minute. Please wait.)
-    call npm install
+    call npm install --legacy-peer-deps
     if %errorlevel% neq 0 (
         echo.
         echo [ERROR] npm install failed.
@@ -36,8 +36,8 @@ echo If successful, browser will open at: http://localhost:8080
 echo.
 
 :: Start backend server in a new window
-echo [STATUS] Starting Backend Server on port 5000...
-start "Atlas Backend" cmd /c "cd server && npm install && node index.js"
+echo [STATUS] Starting Backend Server on port 5050...
+start "Atlas Backend" cmd /c "cd server && npm install --legacy-peer-deps && node index.js"
 
 :: Wait for server to initialize
 timeout /t 3 /nobreak >nul

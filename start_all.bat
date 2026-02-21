@@ -1,20 +1,18 @@
 @echo off
-setlocal
-echo ==========================================
-echo      Atlas ULTIMATE STARTUP (Groq)
-echo ==========================================
-echo.
+echo ============================
+echo   AUREM ATLAS SYSTEM START
+echo ============================
 
-echo [1] Cleaning up old processes...
-taskkill /F /IM node.exe /T 2>nul
-timeout /t 2 /nobreak >nul
-echo.
+echo [1/2] Launching Backend Server (Port 5050)...
+cd server
+start "Atlas Backend" cmd /k "npm install && node index.js"
+cd ..
 
-echo [2] Starting BACKEND (Port 5000)...
-start "Atlas Backend (Full)" /D server cmd /k "node index.js"
-echo Backend launched in new window.
-echo.
+echo [2/2] Launching Frontend (Vite)...
+start "Atlas Frontend" cmd /k "npm run dev"
 
-echo [3] Starting FRONTEND (Port 8080)...
-echo Launching Vite...
-call npm run dev
+echo.
+echo System launched! Two windows should appear.
+echo Backend: 5050
+echo Frontend: 8080 or 5173
+pause

@@ -287,19 +287,43 @@ const PodcastGenerator = () => {
             const availableVoices = kokoroTTS.list_voices();
             console.log('[Kokoro] Available voices:', availableVoices);
 
-            // Select good voices for our hosts
-            // af = American Female, am = American Male
-            kokoroVoices = {
-                // Sam = Female voice - warm and friendly
-                sam: availableVoices.includes('af_bella') ? 'af_bella' :
+            // Select distinct voices for our hosts
+            // af = American Female, am = American Male, bf = British Female, bm = British Male
+            const femaleVoices = availableVoices.filter(v => v.startsWith('af_') || v.startsWith('bf_'));
+            const maleVoices = availableVoices.filter(v => v.startsWith('am_') || v.startsWith('bm_'));
+
+            console.log('[Kokoro] Female voices:', femaleVoices);
+            console.log('[Kokoro] Male voices:', maleVoices);
+
+            // Sam = FEMALE (Warm, American/British)
+            // Prioritize: af_bella > af_sky > af_sarah > any female > first available
+            const samVoice =
+                availableVoices.includes('af_bella') ? 'af_bella' :
                     availableVoices.includes('af_sky') ? 'af_sky' :
-                        availableVoices[0],
-                // Alex = Male voice - clear and professional
-                alex: availableVoices.includes('am_michael') ? 'am_michael' :
+                        availableVoices.includes('af_sarah') ? 'af_sarah' :
+                            femaleVoices.length > 0 ? femaleVoices[0] :
+                                availableVoices[0];
+
+            // Alex = MALE (Deep, Professional)
+            // Prioritize: am_michael > am_adam > bm_george > any male > second available
+            const alexVoice =
+                availableVoices.includes('am_michael') ? 'am_michael' :
                     availableVoices.includes('am_adam') ? 'am_adam' :
-                        availableVoices.includes('bf_emma') ? 'bf_emma' : // British female as fallback
-                            availableVoices[1] || availableVoices[0]
+                        availableVoices.includes('bm_george') ? 'bm_george' :
+                            maleVoices.length > 0 ? maleVoices[0] :
+                                availableVoices.length > 1 ? availableVoices[1] :
+                                    availableVoices[0]; // Worst case: same voice
+
+            kokoroVoices = {
+                sam: samVoice,
+                alex: alexVoice
             };
+
+            // Final check: If voices are identical, force a pitch shift in playback later
+            if (samVoice === alexVoice) {
+                console.warn('[Kokoro] Warning: Could not find distinct voices. Using pitch shift fallback.');
+                kokoroVoices.needsPitchShift = true;
+            }
 
             console.log('[Kokoro] Using voices - Alex:', kokoroVoices.alex, 'Sam:', kokoroVoices.sam);
 
@@ -349,6 +373,8 @@ const PodcastGenerator = () => {
             // Add natural pauses and rhythm to make speech less robotic
             const humanizeText = (text) => {
                 return text
+                    // Handle interruptions (--) with a pause
+                    .replace(/--/g, '... ')
                     // Add slight pause after commas (natural breathing)
                     .replace(/,\s*/g, ', ')
                     // Soften hard punctuation for flow
@@ -365,7 +391,10 @@ const PodcastGenerator = () => {
             console.log(`[Kokoro] Generating audio for ${line.speaker} using voice: ${voice}`);
 
             // Generate with speed parameter for natural variation
-            const speed = line.speaker === 'Alex' ? 1.0 : 0.98; // Sam slightly slower, more thoughtful
+            // Add slight randomness to speed to avoid monotonic delivery
+            const baseSpeed = line.speaker === 'Alex' ? 1.0 : 0.98;
+            const randomVar = (Math.random() * 0.1) - 0.05; // +/- 0.05
+            const speed = baseSpeed + randomVar;
             const audio = await kokoroTTS.generate(processedText, {
                 voice,
                 speed // Kokoro speed parameter
@@ -385,7 +414,18 @@ const PodcastGenerator = () => {
 
             // === HUMAN-LIKE PLAYBACK SETTINGS ===
             // Slightly slower playback for conversational feel (not robotic fast)
-            audioRef.current.playbackRate = line.speaker === 'Alex' ? 0.95 : 0.92;
+            let playbackRate = line.speaker === 'Alex' ? 0.95 : 0.92;
+
+            // Fallback: If we couldn't find distinct voices, use pitch/speed to simulate difference
+            if (kokoroVoices.needsPitchShift) {
+                if (line.speaker === 'Alex') {
+                    playbackRate = 0.9; // Deeper/Slower for "Male" simulation
+                } else {
+                    playbackRate = 1.1; // Higher/Faster for "Female" simulation
+                }
+            }
+
+            audioRef.current.playbackRate = playbackRate;
 
             audioRef.current.onended = () => {
                 setIsLoadingAudio(false);
@@ -535,15 +575,23 @@ const PodcastGenerator = () => {
 
 
     return (
-        <div className={`h-full ${isDark ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'} font-sans transition-colors duration-300 overflow-y-auto custom-scrollbar`}>
+        <div className={`h-full ${isDark ? 'bg-midnight-900 text-white' : 'bg-warm-50 text-warm-800'} font-sans transition-colors duration-300 overflow-y-auto custom-scrollbar`}>
 
             {/* Header */}
-            <div className="py-8 text-center animate-enter">
-                <div className="flex items-center justify-center gap-3 mb-2">
-                    <Radio className="w-10 h-10 text-rose-500 animate-pulse" />
-                    <h1 className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-rose-400 to-orange-500 tracking-tight">AI Podcast Studio</h1>
+            <div className={`px-6 py-5 flex items-center justify-between z-30 glass-3d border-b rounded-b-3xl mx-4 mt-4
+                ${isDark ? 'bg-midnight-900/40 border-white/[0.08]' : 'bg-white/40 border-warm-200/50'}
+            `}>
+                <div className="flex items-center gap-4 group">
+                    <div className={`p-3 rounded-2xl bg-gradient-to-br from-rose-500 to-orange-600 shadow-xl shadow-rose-500/20 group-hover:scale-110 transition-transform duration-500`}>
+                        <Radio className="w-6 h-6 text-white animate-pulse" />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-black bg-gradient-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent uppercase tracking-tight">
+                            Broadcast Studio
+                        </h1>
+                        <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mt-0.5">Autonomous Audio Synthesis</p>
+                    </div>
                 </div>
-                <p className="text-[10px] font-bold tracking-[0.3em] text-gray-500 uppercase">Turn Documents into Engaging Deep-Dive Podcasts</p>
             </div>
 
             <div className="max-w-5xl mx-auto px-6 pb-16 grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -721,27 +769,36 @@ const PodcastGenerator = () => {
                 <div className="lg:col-span-8 animate-enter opacity-0 delay-200 fill-mode-forwards" style={{ animationFillMode: 'forwards' }}>
 
                     {/* Player UI */}
-                    <div className={`p-8 rounded-[2rem] border overflow-hidden relative ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-xl'}`}>
+                    <div className={`p-10 rounded-[48px] glass-3d glow-border relative overflow-hidden transition-all duration-500
+                        ${isDark ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-white/90 border-warm-200/50 shadow-2xl'}
+                    `}>
+                        <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-rose-500 via-orange-500 to-rose-500 animate-pulse" />
 
                         {/* Status Bar */}
-                        <div className="flex items-center justify-between mb-8">
-                            <div className="flex items-center gap-4">
-                                <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isPlaying ? 'bg-rose-500 text-white animate-pulse' : 'bg-gray-700 text-gray-400'}`}>
-                                    {isPlaying ? 'Live on Air' : 'Studio Standby'}
+                        <div className="flex items-center justify-between mb-10">
+                            <div className="flex items-center gap-6">
+                                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-lg transition-all duration-500
+                                    ${isPlaying
+                                        ? 'bg-gradient-to-r from-rose-500 to-rose-600 text-white animate-pulse shadow-rose-500/30'
+                                        : 'bg-gray-800 text-gray-500 border border-white/5'}
+                                `}>
+                                    {isPlaying ? 'System Transmitting' : 'Buffer Standby'}
                                 </div>
-                                <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                                    {podcastScript.length > 0 ? `${podcastScript.length} exchanges scripted` : 'No script loaded'}
+                                <div className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em]">
+                                    {podcastScript.length > 0 ? `${podcastScript.length} Neural Segments` : 'Empty Buffer'}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                {isLoadingAudio && <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />}
-                                <span className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]' : 'bg-gray-600'}`}></span>
-                                <span className="text-[10px] font-bold text-gray-500 uppercase">REC</span>
+                            <div className="flex items-center gap-3">
+                                {isLoadingAudio && <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />}
+                                <div className="flex items-center gap-2 group cursor-pointer">
+                                    <span className={`w-3 h-3 rounded-full transition-all duration-300 ${isPlaying ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.8)] scale-110' : 'bg-gray-600'}`}></span>
+                                    <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest group-hover:text-rose-500 transition-colors">LIVE FEED</span>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Script / Transcript Area */}
-                        <div className={`h-[400px] overflow-y-auto mb-8 pr-4 custom-scrollbar space-y-6 transition-opacity duration-500 ${isGenerating ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
+                        {/* Script / Transcript — Split-Screen Dual Speaker */}
+                        <div className={`h-[400px] mb-8 transition-opacity duration-500 ${isGenerating ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
                             {podcastScript.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-center px-12">
                                     <div className={`p-6 rounded-full mb-6 ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
@@ -751,29 +808,42 @@ const PodcastGenerator = () => {
                                     <p className="text-sm text-gray-500">Upload a resource and generate a script to start your AI-hosted deep dive.</p>
                                 </div>
                             ) : (
-                                podcastScript.map((line, idx) => (
-                                    <div
-                                        key={idx}
-                                        className={`flex gap-4 p-4 rounded-2xl transition-all duration-500 ${currentLineIndex === idx ? (isDark ? 'bg-rose-500/10 border border-rose-500/30' : 'bg-rose-50 border border-rose-200') : ''}`}
-                                    >
-                                        <div className="shrink-0 pt-1">
-                                            {line.speaker === 'Alex' ? (
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-rose-500 to-pink-500 flex items-center justify-center text-white font-black text-xs">A</div>
-                                            ) : (
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white font-black text-xs">S</div>
-                                            )}
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">{line.speaker}</span>
-                                                {currentLineIndex === idx && <div className="flex items-center gap-1"><span className="w-1 h-3 bg-rose-500 rounded-full animate-[pulse_1s_infinite]"></span><span className="w-1 h-3 bg-rose-500 rounded-full animate-[pulse_1.2s_infinite]"></span><span className="w-1 h-3 bg-rose-500 rounded-full animate-[pulse_0.8s_infinite]"></span></div>}
+                                <div className="grid grid-cols-2 gap-3 h-full">
+                                    {/* Alex Panel */}
+                                    <div className={`rounded-2xl border overflow-hidden flex flex-col ${isDark ? 'bg-rose-950/20 border-rose-900/30' : 'bg-rose-50/50 border-rose-100'}`}>
+                                        <div className={`px-4 py-3 border-b flex items-center gap-3 shrink-0 ${isDark ? 'border-rose-900/30 bg-rose-950/40' : 'border-rose-100 bg-rose-50'}`}>
+                                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-500/20">
+                                                <User className="w-4 h-4" />
                                             </div>
-                                            <p className={`text-sm leading-relaxed ${currentLineIndex === idx ? (isDark ? 'text-white' : 'text-gray-950 font-medium') : 'text-gray-500'}`}>
-                                                {line.text}
-                                            </p>
+                                            <span className="text-[11px] font-black uppercase tracking-widest">Alex</span>
+                                            <span className="text-[9px] bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-300 px-1.5 py-0.5 rounded">HOST</span>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+                                            {podcastScript.map((line, idx) => line.speaker === 'Alex' && (
+                                                <div key={idx} className={`p-3 rounded-xl text-xs leading-relaxed transition-all duration-400 ${currentLineIndex === idx ? (isDark ? 'bg-rose-500/15 border border-rose-500/40 text-white font-medium' : 'bg-rose-100 border border-rose-300 text-gray-950 font-medium shadow-sm') : 'opacity-70'}`}>
+                                                    {line.text}
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
-                                ))
+                                    {/* Sam Panel */}
+                                    <div className={`rounded-2xl border overflow-hidden flex flex-col ${isDark ? 'bg-amber-950/20 border-amber-900/30' : 'bg-orange-50/50 border-orange-100'}`}>
+                                        <div className={`px-4 py-3 border-b flex items-center gap-3 shrink-0 ${isDark ? 'border-amber-900/30 bg-amber-950/40' : 'border-orange-100 bg-orange-50'}`}>
+                                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-400 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
+                                                <Sparkles className="w-4 h-4" />
+                                            </div>
+                                            <span className="text-[11px] font-black uppercase tracking-widest">Sam</span>
+                                            <span className="text-[9px] bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-300 px-1.5 py-0.5 rounded">EXPERT</span>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+                                            {podcastScript.map((line, idx) => line.speaker === 'Sam' && (
+                                                <div key={idx} className={`p-3 rounded-xl text-xs leading-relaxed transition-all duration-400 ${currentLineIndex === idx ? (isDark ? 'bg-orange-500/15 border border-orange-500/40 text-white font-medium' : 'bg-orange-100 border border-orange-300 text-gray-950 font-medium shadow-sm') : 'opacity-70'}`}>
+                                                    {line.text}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             )}
                         </div>
 
@@ -826,7 +896,7 @@ const PodcastGenerator = () => {
                     </div>
                 </div>
 
-            </div>
+            </div >
 
             <style jsx>{`
                 @keyframes wave {
@@ -844,7 +914,7 @@ const PodcastGenerator = () => {
                     border-radius: 10px;
                 }
             `}</style>
-        </div>
+        </div >
     );
 };
 

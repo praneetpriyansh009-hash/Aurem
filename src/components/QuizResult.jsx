@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trophy, Target, TrendingUp, AlertCircle, BookOpen, CheckCircle, XCircle, RefreshCw, Youtube } from 'lucide-react';
+import { Trophy, Target, TrendingUp, AlertCircle, BookOpen, CheckCircle, XCircle, RefreshCw, Youtube } from './Icons';
 
 const QuizResult = ({ data, videoRecs, onRetry }) => {
     if (!data) return null;

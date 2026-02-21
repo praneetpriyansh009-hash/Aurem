@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, User, Bot, Loader2, Send, BookOpen, Clock, BrainCircuit, Image, X, Upload, Crown } from './Icons';
+import { Sparkles, User, Bot, Loader2, Send, BookOpen, Clock, BrainCircuit, Image, X, Upload, Crown, RefreshCw, Activity, Infinity, Zap } from './Icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useLearnLoop } from '../contexts/LearnLoopContext';
 import { GROQ_API_URL } from '../utils/api';
 
 const DoubtSolver = ({ retryableFetch }) => {
     const { isDark } = useTheme();
     const { isPro, triggerUpgradeModal } = useSubscription();
+    const { startLoop } = useLearnLoop();
+    const { currentUser } = useAuth();
+
     const [messages, setMessages] = useState([{
         role: 'assistant',
         content: "Hello! I'm AUREM, your AI study companion. Ask me anything about your subjects, and I'll help you understand it clearly!",
@@ -14,7 +19,7 @@ const DoubtSolver = ({ retryableFetch }) => {
     }]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [selectedImage, setSelectedImage] = useState(null); // base64 string
+    const [selectedImage, setSelectedImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -23,7 +28,6 @@ const DoubtSolver = ({ retryableFetch }) => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    // Compress image to stay under Groq's 4MB limit
     const compressImage = (file, maxWidth = 1024, quality = 0.7) => {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -33,19 +37,14 @@ const DoubtSolver = ({ retryableFetch }) => {
                     const canvas = document.createElement('canvas');
                     let width = img.width;
                     let height = img.height;
-
-                    // Scale down if too large
                     if (width > maxWidth) {
                         height = (height * maxWidth) / width;
                         width = maxWidth;
                     }
-
                     canvas.width = width;
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-
-                    // Convert to JPEG for better compression
                     const compressed = canvas.toDataURL('image/jpeg', quality);
                     resolve(compressed);
                 };
@@ -58,20 +57,16 @@ const DoubtSolver = ({ retryableFetch }) => {
     const handleImageUpload = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
         if (!isPro) {
             triggerUpgradeModal('vision');
             if (fileInputRef.current) fileInputRef.current.value = '';
             return;
         }
-
         if (!file.type.startsWith('image/')) {
             alert('Please upload an image file');
             return;
         }
-
         try {
-            // Compress image to stay under 4MB limit
             const compressed = await compressImage(file, 1024, 0.8);
             setImagePreview(compressed);
             setSelectedImage(compressed.split(',')[1]);
@@ -95,11 +90,9 @@ const DoubtSolver = ({ retryableFetch }) => {
         const imageToSend = selectedImage;
         const imagePreviewToSend = imagePreview;
 
-        // Clear input state immediately
         setInput('');
         clearImage();
 
-        // Add user message to state
         const newMessage = {
             role: 'user',
             content: userQuestion || (imageToSend ? '[Image Uploaded]' : ''),
@@ -110,54 +103,49 @@ const DoubtSolver = ({ retryableFetch }) => {
         setMessages(prev => [...prev, newMessage]);
         setIsLoading(true);
 
-        // --- IMPROVED SYSTEM PROMPT ---
-        let systemPrompt = `You are AUREM, an advanced AI study companion designed to be accurate, concise, and logical.
+        let systemPrompt = `You are AUREM — an elite AI study companion and cognitive augmentation system.
 
-        CORE INSTRUCTIONS:
-        1. **Format**: Always use Markdown with clear headers (## Summary, ## Explanation).
-        2. **Summary**: Start with a "## Summary" section using ✨ emojis for key takeaways in bullet points.
-        3. **Explanation**: Provide a detailed "## Explanation" section using 💡 for insights and 📖 for definitions.
-        4. **Direct Answer**: Be concise and logical. Avoid meta-commentary like "Here is the answer".
-        5. **Logical Consistency**: Ensure your explanation flows logically. Do not contradict yourself.
-        6. **Tone**: Professional yet encouraging. Avoid flowery or overly dramatic language.
-        7. **Context Check**: If syllabus context is provided below, use it ONLY if it directly answers the question.
-        8. **Vision**: If an image is provided, analyze it thoroughly to answer the user's request.
+        CORE IDENTITY:
+        - Tone: Elite. Intelligent. Calm. Structured.
+        - Transform questions into mastered understanding.
+        - Pure cognitive clarity. No fluff. No filler.
 
-        STRICT PROHIBITIIONS:
-        - Do not hallucinate facts.
-        - Do not provide irrational or disjointed statements.
-        - Do not apologize excessively.
-        - NEVER output raw text without headers. Always use '## Summary' and '## Explanation'.`;
+        OUTPUT FORMAT:
+        1. **Structure**: Always use Markdown with clear headers (## Summary, ## Explanation).
+        2. **Summary**: Start with a concise "## Summary" section — executive-level clarity in bullet points.
+        3. **Explanation**: Provide a detailed "## Explanation" section with logical depth.
+        4. **Direct Answer**: Be concise and logical. No meta-commentary.
+        5. **Logical Consistency**: Ensure your explanation flows logically. Never contradict yourself.
+        6. **Vision**: If an image is provided, analyze it thoroughly and precisely.
+
+        BEHAVIOR RULES:
+        - Never hallucinate facts. If unsure, say so.
+        - Use elegant formatting with readable hierarchy.
+        - No emojis unless the user uses them.
+        - No motivational talk. No insecurity validation.
+        - If the user shows uncertainty: Guide with Socratic questioning, don't just give the answer.
+        - Adapt depth dynamically — simplify for beginners, deepen for advanced queries.`;
 
         try {
             let payload;
 
-            // Vision Request (Llama 4 Scout - current supported vision model)
             if (imageToSend) {
-                if (imageToSend) {
-                    payload = {
-                        messages: [
-                            {
-                                role: "user",
-                                content: [
-                                    { type: "text", text: `${systemPrompt}\n\nUSER QUESTION: ${userQuestion || "Analyze this image."}` },
-                                    { type: "image_url", image_url: { url: imagePreviewToSend } }
-                                ]
-                            }
-                        ],
-                        temperature: 0.5,
-                        max_tokens: 1024
-                    };
-                }
-            }
-            // Text Request (Llama 3.3 70B)
-            else {
-                // Build payload for Groq with HISTORY
+                payload = {
+                    messages: [{
+                        role: "user",
+                        content: [
+                            { type: "text", text: `${systemPrompt}\n\nUSER QUESTION: ${userQuestion || "Analyze this image."}` },
+                            { type: "image_url", image_url: { url: imagePreviewToSend } }
+                        ]
+                    }],
+                    temperature: 0.5,
+                    max_tokens: 1024
+                };
+            } else {
                 const conversationHistory = messages.map(msg => ({
                     role: msg.role,
                     content: msg.content
                 }));
-
                 payload = {
                     model: "llama-3.3-70b-versatile",
                     messages: [
@@ -186,7 +174,9 @@ const DoubtSolver = ({ retryableFetch }) => {
             setMessages(prev => [...prev, {
                 role: 'assistant',
                 content: responseText,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                canEradicate: true,
+                topicContext: userQuestion
             }]);
 
         } catch (err) {
@@ -203,208 +193,291 @@ const DoubtSolver = ({ retryableFetch }) => {
         }
     };
 
+    const handleEradicateDoubt = (topic) => {
+        const cleanTopic = topic ? topic.substring(0, 50) : "Complex Topic";
+        startLoop(cleanTopic);
+    };
+
+    const suggestedDoubts = [
+        { id: 'physics', text: "Explain Newton's Laws of Motion", icon: Sparkles, color: 'from-emerald-400 to-teal-500' },
+        { id: 'math', text: "Solve: ∫ x²dx from 0 to 3", icon: Activity, color: 'from-blue-400 to-indigo-500' },
+        { id: 'bio', text: "DNA replication process", icon: Infinity, color: 'from-rose-400 to-pink-500' },
+        { id: 'electromag', text: "Explain electromagnetic induction", icon: Zap, color: 'from-orange-400 to-amber-500' }
+    ];
+
+    // --- Markdown line renderer ---
+    const renderLine = (line, idx) => {
+        if (line.startsWith('## ')) {
+            return <h2 key={idx} className="text-base font-display font-bold mt-4 mb-2 text-theme-primary">{line.replace('## ', '')}</h2>;
+        }
+        if (line.startsWith('### ')) {
+            return <h3 key={idx} className={`text-sm font-display font-bold mt-3 mb-1 ${isDark ? 'text-violet-400' : 'text-violet-600'}`}>{line.replace('### ', '')}</h3>;
+        }
+        if (line.includes('**')) {
+            const parts = line.split(/\*\*(.+?)\*\*/g);
+            return (
+                <p key={idx} className="my-1.5 text-[14px] leading-relaxed">
+                    {parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-semibold text-theme-primary">{p}</strong> : p)}
+                </p>
+            );
+        }
+        if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
+            return (
+                <div key={idx} className="flex gap-2.5 my-1 ml-1 text-[14px] leading-relaxed">
+                    <span className="text-theme-primary mt-0.5">•</span>
+                    <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
+                </div>
+            );
+        }
+        if (line.trim()) {
+            return <p key={idx} className="my-1.5 text-[14px] leading-relaxed">{line}</p>;
+        }
+        return <div key={idx} className="h-1.5" />;
+    };
+
     return (
-        <div className={`flex flex-col h-full ${isDark ? 'bg-midnight-900' : 'bg-warm-50'} text-theme-primary relative overflow-hidden transition-colors duration-300 font-sans scene-3d`}>
-            {/* 3D Floating Elements Background */}
-            <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                {/* Cube 1 */}
-                <div className="cube-3d opacity-20 left-[10%] top-[20%]">
-                    <div className="cube-face cube-face-front"></div>
-                    <div className="cube-face cube-face-back"></div>
-                    <div className="cube-face cube-face-right"></div>
-                    <div className="cube-face cube-face-left"></div>
-                    <div className="cube-face cube-face-top"></div>
-                    <div className="cube-face cube-face-bottom"></div>
-                </div>
-                {/* Cube 2 */}
-                <div className="cube-3d opacity-20 right-[15%] bottom-[30%] animation-delay-2000">
-                    <div className="cube-face cube-face-front"></div>
-                    <div className="cube-face cube-face-back"></div>
-                    <div className="cube-face cube-face-right"></div>
-                    <div className="cube-face cube-face-left"></div>
-                    <div className="cube-face cube-face-top"></div>
-                    <div className="cube-face cube-face-bottom"></div>
-                </div>
+        <div className={`flex flex-col h-full relative overflow-hidden transition-colors duration-300
+            ${isDark ? 'bg-midnight-900' : 'bg-warm-50'}
+        `}>
 
-                <div className={`absolute top-0 right-0 w-[800px] h-[800px] ${isDark ? 'bg-brand-primary/5' : 'bg-brand-primary/5'} rounded-full blur-[120px] -z-10 translate-x-1/3 -translate-y-1/3`} />
-                <div className={`absolute bottom-0 left-0 w-[600px] h-[600px] ${isDark ? 'bg-brand-secondary/5' : 'bg-brand-secondary/5'} rounded-full blur-[100px] -z-10 -translate-x-1/3 translate-y-1/3`} />
-            </div>
-
-            {/* Header */}
-            <div className={`px-6 py-4 glass-panel sticky top-0 z-30 flex items-center justify-between border-b ${isDark ? 'border-white/5' : 'border-black/5'} shadow-sm`}>
-                <div className="flex items-center">
-                    <div className={`p-2.5 rounded-xl ${isDark ? 'bg-brand-primary/20 text-brand-primary' : 'bg-brand-primary/10 text-brand-primary'} mr-4 shadow-sm backdrop-blur-md`}>
-                        <BrainCircuit className="w-6 h-6" />
+            {/* ═══ Header ═══ */}
+            <div className={`px-6 py-5 flex items-center justify-between z-30 glass-3d border-b rounded-b-3xl mx-4 mt-4
+                ${isDark ? 'bg-midnight-900/40 border-white/[0.08]' : 'bg-white/40 border-warm-200/50'}
+            `}>
+                <div className="flex items-center gap-4 group cursor-default">
+                    <div className={`p-3 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 group-hover:scale-110 transition-transform duration-500`}>
+                        <BrainCircuit className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-display font-bold text-theme-primary tracking-tight">Aurem Intelligence</h2>
-                        <div className="flex items-center mt-0.5">
-                            <span className="flex w-1.5 h-1.5 bg-emerald-500 rounded-full mr-2 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-                            <p className="text-[10px] font-medium text-theme-muted uppercase tracking-wider">Unlimited Access</p>
-                        </div>
+                        <h2 className={`text-lg font-black tracking-tight bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent uppercase`}>
+                            Aurem Intelligence
+                        </h2>
                     </div>
                 </div>
             </div>
 
-            {/* Chat Area - Fixed Layout */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar scroll-smooth z-10">
-                {messages.map((msg, i) => (
-                    <div key={i} className={`flex w-full animate-slide-up ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {/* ═══ Chat Area ═══ */}
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 custom-scrollbar z-10">
+                {messages.length === 1 && (
+                    <div className="max-w-3xl mx-auto py-8 space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                        {/* Welcome Header */}
+                        <div className="text-center space-y-3">
+                            <h1 className="text-3xl md:text-4xl font-black tracking-tightest">
+                                <span className="bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 bg-clip-text text-transparent">
+                                    Hello, {currentUser?.displayName?.split(' ')[0] || 'Student'}!
+                                </span>
+                            </h1>
+                            <div className="space-y-1">
+                                <h3 className={`text-lg font-bold ${isDark ? 'text-white/90' : 'text-slate-800'}`}>
+                                    I'm AUREM — your AI study companion
+                                </h3>
+                                <p className="text-theme-muted max-w-lg mx-auto leading-relaxed text-sm">
+                                    I understand concepts deeply and guide you step-by-step. I never give full answers until you understand the "why".
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Suggested Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {suggestedDoubts.map((doubt) => (
+                                <button
+                                    key={doubt.id}
+                                    onClick={() => {
+                                        setInput(doubt.text);
+                                        // Auto send could be added here
+                                    }}
+                                    className={`group relative p-6 rounded-[28px] border glass-3d glow-border text-left transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1
+                                        ${isDark ? 'bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.06]' : 'bg-white border-warm-200 shadow-sm hover:shadow-md'}
+                                    `}
+                                >
+                                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${doubt.color} p-2.5 mb-4 shadow-lg shadow-indigo-500/10`}>
+                                        <doubt.icon className="w-full h-full text-white" />
+                                    </div>
+                                    <p className="font-bold text-theme-primary leading-snug">{doubt.text}</p>
+                                    <div className="absolute bottom-4 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Send className="w-4 h-4 text-theme-muted" />
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {messages.length > 1 && messages.map((msg, i) => (
+                    <div key={i} className={`flex w-full animate-fade-in-up ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        style={{ animationDelay: `${Math.min(i * 50, 200)}ms` }}>
                         <div className={`flex flex-col max-w-[85%] sm:max-w-[70%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
 
-                            {/* Sender Info - Compact */}
-                            <div className="flex items-center mb-1.5 px-1 opacity-70 hover:opacity-100 transition-opacity">
-                                <span className={`text-[10px] font-bold uppercase tracking-widest ${msg.role === 'user' ? 'text-theme-muted' : 'text-brand-primary'}`}>
+                            {/* Sender badge */}
+                            <div className="flex items-center mb-1.5 px-1 gap-2">
+                                {msg.role === 'assistant' && (
+                                    <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+                                        <Sparkles className="w-3 h-3 text-white" />
+                                    </div>
+                                )}
+                                <span className={`text-[10px] font-bold uppercase tracking-wider
+                                    ${msg.role === 'user' ? 'text-theme-muted' : 'text-indigo-500'}
+                                `}>
                                     {msg.role === 'user' ? 'You' : 'Aurem'}
                                 </span>
-                                <span className="mx-2 text-[10px] text-theme-muted/50">•</span>
-                                <span className="flex items-center text-[10px] text-theme-muted">
-                                    {msg.timestamp}
-                                </span>
+                                <span className="text-[10px] text-theme-muted opacity-50">{msg.timestamp}</span>
                             </div>
 
-                            {/* Message Bubble - Refined */}
-                            <div className={`relative p-5 rounded-2xl shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 ${msg.role === 'user'
-                                ? 'bg-gradient-to-br from-brand-primary to-indigo-600 text-white rounded-tr-none'
-                                : `${isDark ? 'bg-midnight-800/80 border-white/10' : 'bg-white/80 border-warm-200'} border text-theme-primary rounded-tl-none backdrop-blur-md`
-                                }`}>
-
+                            {/* Message Bubble */}
+                            <div className={`relative p-5 sm:p-6 rounded-[24px] transition-all duration-300 glass-3d glow-border
+                                 ${msg.role === 'user'
+                                    ? 'bg-gradient-to-br from-indigo-600 to-violet-700 text-white rounded-tr-sm shadow-xl shadow-indigo-500/20'
+                                    : msg.isError
+                                        ? `${isDark ? 'bg-red-500/15 border border-red-500/30' : 'bg-red-50 border border-red-200'} rounded-tl-sm`
+                                        : `${isDark ? 'bg-white/[0.03] border border-white/[0.08]' : 'bg-white/90 border border-warm-200/50'} rounded-tl-sm`
+                                }
+                             `}>
                                 {msg.isSyllabusVerified && (
-                                    <div className="mb-2 inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-bold uppercase tracking-wider">
+                                    <div className="mb-2.5 inline-flex items-center px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/15 text-emerald-500 text-[10px] font-bold uppercase tracking-wider">
                                         <BookOpen className="w-3 h-3 mr-1.5" /> Context Verified
                                     </div>
                                 )}
 
                                 {msg.image && (
-                                    <div className="mb-3 rounded-xl overflow-hidden shadow-lg border border-white/10">
-                                        <img src={msg.image} alt="Uploaded Question" className="w-full h-auto max-h-60 object-cover" />
+                                    <div className="mb-3 rounded-xl overflow-hidden shadow-md">
+                                        <img src={msg.image} alt="Uploaded" className="w-full h-auto max-h-52 object-cover" />
                                     </div>
                                 )}
 
-                                <div className={`prose prose-sm max-w-none ${msg.role === 'user' ? 'prose-invert text-white/95' : 'text-theme-secondary'} font-sans leading-relaxed`}>
+                                <div className={`${msg.role === 'user' ? 'text-white/95' : isDark ? 'text-white/80' : 'text-warm-700'}`}>
                                     {msg.role === 'user' ? (
-                                        <div className="whitespace-pre-wrap text-[15px]">{msg.content}</div>
+                                        <div className="whitespace-pre-wrap text-[14px] leading-relaxed">{msg.content}</div>
                                     ) : (
-                                        <div className="space-y-1">
-                                            {msg.content.split('\n').map((line, idx) => {
-                                                if (line.startsWith('## ')) {
-                                                    return <h2 key={idx} className={`text-lg font-bold mt-4 mb-2 ${isDark ? 'text-brand-primary' : 'text-indigo-600'}`}>{line.replace('## ', '')}</h2>;
-                                                }
-                                                if (line.startsWith('### ')) {
-                                                    return <h3 key={idx} className={`text-md font-bold mt-3 mb-1 ${isDark ? 'text-indigo-400' : 'text-indigo-500'}`}>{line.replace('### ', '')}</h3>;
-                                                }
-                                                if (line.includes('**')) {
-                                                    const parts = line.split(/\*\*(.+?)\*\*/g);
-                                                    return (
-                                                        <p key={idx} className="my-1.5 text-[15px]">
-                                                            {parts.map((p, j) => j % 2 === 1 ? <strong key={j} className="font-bold text-brand-primary">{p}</strong> : p)}
-                                                        </p>
-                                                    );
-                                                }
-                                                if (line.trim().startsWith('- ') || line.trim().startsWith('• ')) {
-                                                    return (
-                                                        <div key={idx} className="flex gap-2 my-1 ml-2 text-[15px]">
-                                                            <span className="text-brand-primary">•</span>
-                                                            <span>{line.trim().replace(/^[-•]\s*/, '')}</span>
-                                                        </div>
-                                                    );
-                                                }
-                                                if (line.trim()) {
-                                                    return <p key={idx} className="my-1.5 text-[15px]">{line}</p>;
-                                                }
-                                                return <div key={idx} className="h-1.5" />;
-                                            })}
+                                        <div className="space-y-0.5">
+                                            {msg.content.split('\n').map((line, idx) => renderLine(line, idx))}
                                         </div>
                                     )}
                                 </div>
+
+                                {msg.canEradicate && (
+                                    <div className={`mt-4 pt-3 flex justify-end border-t ${isDark ? 'border-white/[0.04]' : 'border-warm-200/40'}`}>
+                                        <button
+                                            onClick={() => handleEradicateDoubt(msg.topicContext)}
+                                            className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-[11px] font-bold rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2"
+                                        >
+                                            <RefreshCw className="w-3.5 h-3.5" />
+                                            Eradicate Doubt
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
                 ))}
 
+                {/* Typing indicator */}
                 {isLoading && (
-                    <div className="flex justify-start animate-fade-in pl-2">
-                        <div className={`p-4 rounded-2xl rounded-tl-none ${isDark ? 'bg-midnight-800/50' : 'bg-white/50'} flex items-center space-x-2`}>
-                            <div className="w-1.5 h-1.5 bg-brand-primary rounded-full animate-bounce"></div>
-                            <div className="w-1.5 h-1.5 bg-brand-primary rounded-full animate-bounce delay-100"></div>
-                            <div className="w-1.5 h-1.5 bg-brand-primary rounded-full animate-bounce delay-200"></div>
+                    <div className="flex justify-start animate-fade-in pl-1">
+                        <div className="flex items-center gap-2 mb-1.5 px-1">
+                            <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
+                                <Sparkles className="w-3 h-3 text-white" />
+                            </div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Aurem</span>
                         </div>
                     </div>
                 )}
+                {isLoading && (
+                    <div className="flex justify-start pl-1">
+                        <div className={`px-5 py-4 rounded-2xl rounded-tl-md flex items-center gap-1.5
+                            ${isDark ? 'bg-midnight-700/60 border border-white/[0.05]' : 'bg-white/80 border border-warm-300/20'}
+                        `}>
+                            <div className="typing-dot" />
+                            <div className="typing-dot" />
+                            <div className="typing-dot" />
+                        </div>
+                    </div>
+                )}
+
                 <div ref={messagesEndRef} />
             </div>
 
-            {/* Input Area - Grounded & Compact */}
-            <div className={`p-4 z-20 ${isDark ? 'bg-midnight-900/80' : 'bg-warm-50/80'} backdrop-blur-xl border-t ${isDark ? 'border-white/5' : 'border-black/5'} sticky bottom-0`}>
-                <div className="max-w-4xl mx-auto space-y-2">
+            {/* ═══ Input Area ═══ */}
+            <div className={`p-4 z-20 backdrop-blur-xl border-t
+                ${isDark ? 'bg-midnight-900/80 border-white/[0.04]' : 'bg-warm-50/80 border-warm-300/20'}
+            `}>
+                <div className="max-w-3xl mx-auto space-y-2">
                     {/* Image Preview */}
                     {imagePreview && (
-                        <div className="flex items-center gap-2 animate-slide-up">
+                        <div className="flex items-center gap-3 animate-slide-up">
                             <div className="relative group">
-                                <img src={imagePreview} alt="Preview" className="w-16 h-16 rounded-xl object-cover border-2 border-brand-primary shadow-lg" />
+                                <img src={imagePreview} alt="Preview" className="w-14 h-14 rounded-xl object-cover border-2 border-violet-500/50 shadow-md" />
                                 <button
                                     onClick={clearImage}
-                                    className="absolute -top-2 -right-2 p-1 bg-rose-500 text-white rounded-full shadow-md hover:bg-rose-600 transition-colors"
+                                    className="absolute -top-1.5 -right-1.5 p-1 bg-rose-500 text-white rounded-full shadow-md hover:bg-rose-600 transition-colors"
                                 >
-                                    <X className="w-3 h-3" />
+                                    <X className="w-2.5 h-2.5" />
                                 </button>
                             </div>
-                            <span className="text-xs text-brand-primary font-bold animate-pulse">Image attached</span>
+                            <span className="text-xs text-violet-500 font-semibold">Image attached</span>
                         </div>
                     )}
 
-                    <form onSubmit={handleSendMessage} className="relative flex items-center gap-3">
-                        <div className="relative flex-1 group flex items-center gap-2">
-                            {/* Image Upload Button */}
-                            <div className="relative">
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={handleImageUpload}
-                                    className="hidden"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className={`p-3.5 rounded-2xl border transition-all flex items-center justify-center relative group/btn
-                                        ${isDark ? 'border-white/10 bg-white/5 hover:bg-white/10' : 'border-warm-200 bg-white hover:bg-warm-100'}
-                                    `}
-                                    title={isPro ? "Upload Image Question" : "Upload Image Question (Pro Only)"}
-                                >
-                                    <Image className={`w-5 h-5 ${isPro ? 'text-brand-primary' : 'text-gray-400'}`} />
-                                    {!isPro && (
-                                        <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-0.5 border-2 border-white dark:border-midnight-900">
-                                            <Crown className="w-2 h-2 text-white" />
-                                        </div>
-                                    )}
-                                </button>
-                            </div>
+                    <form onSubmit={handleSendMessage} className="flex items-center gap-2.5">
+                        {/* Image Upload */}
+                        <div className="relative flex-shrink-0">
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImageUpload}
+                                className="hidden"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className={`p-3 rounded-2xl border transition-all duration-200 relative
+                                    ${isDark
+                                        ? 'border-white/[0.06] bg-midnight-700/50 hover:bg-white/[0.06] text-white/40 hover:text-violet-400'
+                                        : 'border-warm-300/30 bg-white/60 hover:bg-white text-warm-400 hover:text-violet-500'
+                                    }
+                                `}
+                                title={isPro ? "Upload Image" : "Upload Image (Pro)"}
+                            >
+                                <Image className="w-5 h-5" />
+                                {!isPro && (
+                                    <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-0.5 shadow-sm">
+                                        <Crown className="w-2 h-2 text-white" />
+                                    </div>
+                                )}
+                            </button>
+                        </div>
 
-                            <div className={`absolute inset-0 rounded-2xl bg-gradient-to-r from-brand-primary to-brand-secondary opacity-0 group-hover:opacity-10 transition-opacity duration-300 blur-md pointer-events-none`}></div>
+                        {/* Text Input */}
+                        <div className="flex-1 relative">
                             <input
                                 type="text"
                                 value={input}
                                 onChange={(e) => setInput(e.target.value)}
-                                placeholder={selectedImage ? "Add a question about this image..." : "Ask Aurem anything..."}
-                                className={`relative w-full py-4 pl-6 pr-12 ${isDark ? 'bg-midnight-800 text-white placeholder:text-gray-500' : 'bg-white text-gray-900 placeholder:text-gray-400'} border ${isDark ? 'border-white/10 focus:border-brand-primary/50' : 'border-warm-200 focus:border-brand-primary/30'} rounded-2xl outline-none transition-all shadow-sm focus:shadow-md text-base font-medium`}
+                                placeholder={selectedImage ? "Ask about this image..." : "Ask Aurem anything..."}
+                                className={`w-full py-3.5 pl-5 pr-12 rounded-2xl text-[14px] font-medium outline-none transition-all duration-200
+                                    ${isDark
+                                        ? 'bg-midnight-700/50 text-white placeholder:text-white/25 border border-white/[0.06] focus:border-indigo-500/40 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.08)]'
+                                        : 'bg-white/70 text-warm-800 placeholder:text-warm-400 border border-warm-300/25 focus:border-indigo-400/40 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.06)]'
+                                    }
+                                `}
                                 disabled={isLoading}
                             />
                             <button
                                 type="submit"
                                 disabled={isLoading || (!input.trim() && !selectedImage)}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-brand-primary hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-brand-primary text-white rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 disabled:opacity-30 text-white rounded-xl shadow-md transition-all active:scale-95"
                             >
                                 <Send className="w-4 h-4" />
                             </button>
                         </div>
                     </form>
                 </div>
-                <div className="text-center mt-3">
-                    <p className="text-[10px] text-theme-muted uppercase tracking-widest opacity-50">
-                        Made with ❤️ by Praneet Priyansh for students
-                    </p>
-                </div>
+
+                <p className={`text-center mt-3 text-[10px] uppercase tracking-widest
+                    ${isDark ? 'text-white/15' : 'text-warm-400/50'}
+                `}>
+                    Made with ❤️ by Praneet Priyansh for students
+                </p>
             </div>
         </div>
     );

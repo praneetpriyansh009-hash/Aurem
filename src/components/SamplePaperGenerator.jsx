@@ -1,13 +1,15 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Loader2, AlertCircle, CheckCircle2, Download, Play, Trophy, ArrowRight, Save, RotateCcw } from 'lucide-react';
+import { Upload, FileText, Loader2, AlertCircle, CheckCircle2, Download, Play, Trophy, ArrowRight, Save, RotateCcw } from './Icons';
 import * as pdfjsLib from 'pdfjs-dist';
 import { useSubscription } from '../contexts/SubscriptionContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE_URL } from '../utils/api';
 
 // Use the worker from the npm package directly if possible, or a specific version from CDN that matches.
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 const SamplePaperGenerator = ({ retryableFetch }) => {
+    const { isDark } = useTheme();
     const [file, setFile] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [loadingStep, setLoadingStep] = useState(''); // 'parsing', 'analyzing', 'generating'
@@ -195,15 +197,17 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
 
     // --- Render Helpers ---
 
-    const renderQuestion = (q, sectionName) => {
+    const renderQuestion = (q) => {
         return (
-            <div key={q.id} className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm mb-4">
-                <div className="flex justify-between items-start mb-3">
-                    <span className="font-bold text-slate-700 dark:text-slate-300">Q{q.number}</span>
-                    <span className="text-xs font-semibold px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-slate-500">{q.marks} Marks</span>
+            <div key={q.id} className={`p-6 rounded-[24px] border glass-3d glow-border transition-all duration-300 mb-6
+                ${isDark ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-white border-warm-200/50 shadow-sm'}
+            `}>
+                <div className="flex justify-between items-start mb-4">
+                    <span className="font-black text-[10px] uppercase tracking-widest text-theme-muted">Question {q.number}</span>
+                    <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-indigo-500/10 text-indigo-500 rounded-full border border-indigo-500/20`}>{q.marks} Marks</span>
                 </div>
 
-                <p className="text-slate-800 dark:text-slate-200 mb-4 whitespace-pre-wrap">{q.text}</p>
+                <p className="text-lg font-bold mb-6 leading-relaxed">{q.text}</p>
 
                 {q.type === 'mcq' && q.options ? (
                     <div className="space-y-2">
@@ -258,138 +262,152 @@ const SamplePaperGenerator = ({ retryableFetch }) => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900/50 p-6 overflow-y-auto">
-            <div className="max-w-4xl mx-auto w-full space-y-8 pb-20">
-
-                {/* Header */}
-                <div className="text-center space-y-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-bold uppercase tracking-wider mb-2 border border-amber-200 dark:border-amber-800">
-                        <AlertCircle className="w-3 h-3" />
-                        Beta Feature • Under Development
+        <div className={`flex flex-col h-full transition-colors duration-300 overflow-hidden ${isDark ? 'bg-midnight-950 text-white' : 'bg-warm-50 text-slate-900'}`}>
+            {/* Header */}
+            <div className={`px-6 py-5 flex items-center justify-between z-30 glass-3d border-b rounded-b-3xl mx-4 mt-4 shrink-0
+                ${isDark ? 'bg-midnight-900/40 border-white/[0.08]' : 'bg-white/40 border-warm-200/50'}
+            `}>
+                <div className="flex items-center gap-4 group">
+                    <div className={`p-3 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 shadow-xl shadow-indigo-500/20 group-hover:scale-110 transition-transform duration-500`}>
+                        <FileText className="w-6 h-6 text-white" />
                     </div>
-                    <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent">
-                        Interactive Paper Generator
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400 max-w-2xl mx-auto">
-                        {mode === 'upload' && "Upload a sample to generate a similar interactive test. This feature is experimental and may produce unexpected results."}
-                        {mode === 'attempt' && "Good luck! Attempt the questions below."}
-                        {mode === 'result' && "Analysis complete. Review your performance."}
-                    </p>
+                    <div>
+                        <h1 className="text-xl font-black bg-gradient-to-r from-indigo-500 to-indigo-600 bg-clip-text text-transparent uppercase tracking-tight">
+                            Synthetic Examiner
+                        </h1>
+                        <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mt-0.5">High-Fidelity Test Generation</p>
+                    </div>
                 </div>
+            </div>
 
-                {/* Upload Mode */}
-                {mode === 'upload' && !isLoading && (
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 transition-colors shadow-sm animate-in fade-in">
-                        <div className="flex flex-col items-center justify-center space-y-4">
-                            <div className="p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-full">
-                                <Upload className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
-                            </div>
-                            <div className="text-center">
-                                <p className="text-lg font-medium text-slate-700 dark:text-slate-200">
-                                    {file ? file.name : "Drag & drop original paper (PDF/Image)"}
-                                </p>
-                            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8">
+                <div className="max-w-4xl mx-auto w-full space-y-12 pb-20">
 
-                            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf,image/*" className="hidden" />
+                    <div className="text-center space-y-4">
+                        <p className="text-theme-muted max-w-2xl mx-auto leading-relaxed italic">
+                            {mode === 'upload' && "Autonomous replication of standard testing protocols. Upload your reference material to initialize."}
+                            {mode === 'attempt' && "Session active. Optimal performance requested."}
+                            {mode === 'result' && "Evaluation complete. Metrics synthesized below."}
+                        </p>
+                    </div>
 
-                            <div className="flex space-x-3">
-                                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 text-sm font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors">
-                                    {file ? "Change File" : "Select File"}
-                                </button>
-                                {file && (
-                                    <button onClick={handleUploadAndGenerate} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-md">
-                                        Generate & Start Test
+                    {/* Upload Mode */}
+                    {mode === 'upload' && !isLoading && (
+                        <div className={`rounded-[40px] p-12 border glass-3d glow-border transition-all duration-500 hover:scale-[1.01]
+                            ${isDark ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-white/90 border-warm-200/50 shadow-2xl'}
+                        `}>
+                            <div className="flex flex-col items-center justify-center space-y-6">
+                                <div className="p-6 bg-indigo-500/10 rounded-3xl animate-pulse">
+                                    <Upload className="w-10 h-10 text-indigo-500" />
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-xl font-black text-theme-primary uppercase tracking-tight">
+                                        {file ? file.name : "Initialize Neural Upload"}
+                                    </p>
+                                    <p className="text-xs text-theme-muted mt-2 uppercase tracking-widest font-black">PDF / Image • Standard Protocol</p>
+                                </div>
+
+                                <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".pdf,image/*" className="hidden" />
+
+                                <div className="flex gap-4 pt-4">
+                                    <button onClick={() => fileInputRef.current?.click()} className="px-6 py-3 text-xs font-black uppercase tracking-widest text-indigo-500 glass-3d glow-border rounded-2xl hover:bg-indigo-500/5 transition-all">
+                                        {file ? "Change Target" : "Select Source"}
                                     </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* Loading State */}
-                {isLoading && (
-                    <div className="flex flex-col items-center justify-center py-20 space-y-6 animate-in fade-in zoom-in duration-300">
-                        <div className="relative">
-                            <div className="w-20 h-20 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-                            </div>
-                        </div>
-                        <div className="text-center space-y-2">
-                            <h3 className="text-xl font-semibold text-slate-800 dark:text-white">AI Examiner Working</h3>
-                            <p className="text-slate-500 dark:text-slate-400">{loadingStep}</p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Error State */}
-                {error && (
-                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-start space-x-3">
-                        <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
-                        <div>
-                            <h4 className="font-medium text-red-900 dark:text-red-200">Error Occurred</h4>
-                            <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Attempt & Result Mode */}
-                {(mode === 'attempt' || mode === 'result') && paperData && !isLoading && (
-                    <div className="space-y-8 animate-in slide-in-from-bottom-10">
-                        {/* Paper Title & Actions */}
-                        <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                            <h2 className="text-2xl font-bold">{paperData.title}</h2>
-                            <div className="flex gap-2">
-                                <button onClick={downloadPaperMarkdown} className="flex items-center gap-2 px-4 py-2 text-sm border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700">
-                                    <Download className="w-4 h-4" /> Save Markdown
-                                </button>
-                                {mode === 'result' && (
-                                    <button onClick={() => { setMode('upload'); setFile(null); setPaperData(null); }} className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200">
-                                        <RotateCcw className="w-4 h-4" /> New Test
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Result Score Card */}
-                        {mode === 'result' && evaluation && (
-                            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-8 text-white shadow-lg animate-in zoom-in">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-indigo-100 font-medium mb-1">Total Score</p>
-                                        <h3 className="text-4xl font-bold">{evaluation.studentScore} <span className="text-2xl opacity-70">/ {evaluation.totalMarks}</span></h3>
-                                    </div>
-                                    <Trophy className="w-16 h-16 text-yellow-300 opacity-90" />
+                                    {file && (
+                                        <button onClick={handleUploadAndGenerate} className="px-8 py-3 text-xs font-black uppercase tracking-widest text-white bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-2xl shadow-xl shadow-indigo-500/30 hover:scale-105 transition-all">
+                                            Active Protocol
+                                        </button>
+                                    )}
                                 </div>
                             </div>
-                        )}
+                        </div>
+                    )}
 
-                        {/* Sections & Questions */}
-                        {paperData.sections.map((section, sIdx) => (
-                            <div key={sIdx} className="space-y-4">
-                                <h3 className="text-xl font-semibold text-slate-800 dark:text-white border-b pb-2">{section.name}</h3>
-                                {section.questions.map((q) => (
-                                    <div key={q.id}>
-                                        {renderQuestion(q, section.name)}
-                                        {mode === 'result' && renderResultParams(q.id)}
+                    {/* Loading State */}
+                    {isLoading && (
+                        <div className="flex flex-col items-center justify-center py-20 space-y-6 animate-in fade-in zoom-in duration-300">
+                            <div className="relative">
+                                <div className="w-20 h-20 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                                </div>
+                            </div>
+                            <div className="text-center space-y-2">
+                                <h3 className="text-xl font-semibold text-slate-800 dark:text-white">AI Examiner Working</h3>
+                                <p className="text-slate-500 dark:text-slate-400">{loadingStep}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Error State */}
+                    {error && (
+                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-start space-x-3">
+                            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
+                            <div>
+                                <h4 className="font-medium text-red-900 dark:text-red-200">Error Occurred</h4>
+                                <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Attempt & Result Mode */}
+                    {(mode === 'attempt' || mode === 'result') && paperData && !isLoading && (
+                        <div className="space-y-8 animate-in slide-in-from-bottom-10">
+                            {/* Paper Title & Actions */}
+                            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+                                <h2 className="text-2xl font-bold">{paperData.title}</h2>
+                                <div className="flex gap-2">
+                                    <button onClick={downloadPaperMarkdown} className="flex items-center gap-2 px-4 py-2 text-sm border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700">
+                                        <Download className="w-4 h-4" /> Save Markdown
+                                    </button>
+                                    {mode === 'result' && (
+                                        <button onClick={() => { setMode('upload'); setFile(null); setPaperData(null); }} className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200">
+                                            <RotateCcw className="w-4 h-4" /> New Test
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Result Score Card */}
+                            {mode === 'result' && evaluation && (
+                                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-8 text-white shadow-lg animate-in zoom-in">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="text-indigo-100 font-medium mb-1">Total Score</p>
+                                            <h3 className="text-4xl font-bold">{evaluation.studentScore} <span className="text-2xl opacity-70">/ {evaluation.totalMarks}</span></h3>
+                                        </div>
+                                        <Trophy className="w-16 h-16 text-yellow-300 opacity-90" />
                                     </div>
-                                ))}
-                            </div>
-                        ))}
+                                </div>
+                            )}
 
-                        {/* Submit Button */}
-                        {mode === 'attempt' && (
-                            <div className="sticky bottom-6 flex justify-center pt-4">
-                                <button
-                                    onClick={handleSubmitPaper}
-                                    className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all text-lg"
-                                >
-                                    <CheckCircle2 className="w-6 h-6" /> Submit for Grading
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                )}
+                            {/* Sections & Questions */}
+                            {paperData.sections.map((section, sIdx) => (
+                                <div key={sIdx} className="space-y-4">
+                                    <h3 className="text-xl font-semibold text-slate-800 dark:text-white border-b pb-2">{section.name}</h3>
+                                    {section.questions.map((q) => (
+                                        <div key={q.id}>
+                                            {renderQuestion(q, section.name)}
+                                            {mode === 'result' && renderResultParams(q.id)}
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+
+                            {/* Submit Button */}
+                            {mode === 'attempt' && (
+                                <div className="sticky bottom-6 flex justify-center pt-4">
+                                    <button
+                                        onClick={handleSubmitPaper}
+                                        className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full font-bold shadow-lg hover:shadow-xl hover:scale-105 transition-all text-lg"
+                                    >
+                                        <CheckCircle2 className="w-6 h-6" /> Submit for Grading
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
