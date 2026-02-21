@@ -1,9 +1,8 @@
-```javascript
 import React, { useState, useEffect } from 'react';
 import { generateLensPrompt, fetchTranscript } from '../utils/youtubeService';
 import { GoogleGenerativeAI } from '@google/generative-ai'; // Assuming this is needed or used
 import { Trophy, CheckCircle2, AlertCircle, RefreshCw, Loader2, ChevronRight, Check, X, Sparkles, Brain } from 'lucide-react';
-import { callGeminiDirect } from '../utils/api';
+import { callGemini } from '../utils/geminiClient';
 
 const MASTERY_STATES = {
     IDLE: 'IDLE',
@@ -21,7 +20,7 @@ const MasteryLoop = ({ initialQuiz, onMastery, contextText, topic }) => {
     const [score, setScore] = useState(0);
     const [feedback, setFeedback] = useState([]); // List of weak topics
     const [isLoading, setIsLoading] = useState(false);
-    
+
     // Remediation Content States
     const [assessmentReport, setAssessmentReport] = useState(null);
     const [remediationFlashcards, setRemediationFlashcards] = useState(null);
@@ -76,25 +75,25 @@ const MasteryLoop = ({ initialQuiz, onMastery, contextText, topic }) => {
         // Fetch Detailed Assessment Report
         try {
             const prompt = "You are an expert AI Assessor. The user completed a quiz on " + topic + ". Their score is " + calculatedScore.toFixed(0) + "%.\n" +
-            "PERFORMANCE DATA: " + JSON.stringify(userResults) + "\n\n" +
-            "OUTPUT STRICTLY AS JSON:\n" +
-            "{\n" +
-            "    \"overall_analysis\": \"A supportive but objective 3-sentence summary of their performance.\",\n" +
-            "    \"strengths\": [\"List of 2-3 specific topics or concepts they understand closely\"],\n" +
-            "    \"weaknesses\": [\"List of 2-3 specific topics they struggled with\"],\n" +
-            "    \"detailed_feedback\": [\n" +
-            "        { \"question_snippet\": \"First 5 words of the question...\", \"explanation\": \"Explain exactly why the correct answer is correct, and why their answer was wrong. Be extremely clear.\" }\n" +
-            "    ],\n" +
-            "    \"remediation_notes\": \"If score < 60, provide a robust, bulleted crash-course exclusively teaching their weak points. If >= 60, output an empty string.\"\n" +
-            "}";
-            const response = await callGeminiDirect([{ role: 'user', content: prompt }]);
+                "PERFORMANCE DATA: " + JSON.stringify(userResults) + "\n\n" +
+                "OUTPUT STRICTLY AS JSON:\n" +
+                "{\n" +
+                "    \"overall_analysis\": \"A supportive but objective 3-sentence summary of their performance.\",\n" +
+                "    \"strengths\": [\"List of 2-3 specific topics or concepts they understand closely\"],\n" +
+                "    \"weaknesses\": [\"List of 2-3 specific topics they struggled with\"],\n" +
+                "    \"detailed_feedback\": [\n" +
+                "        { \"question_snippet\": \"First 5 words of the question...\", \"explanation\": \"Explain exactly why the correct answer is correct, and why their answer was wrong. Be extremely clear.\" }\n" +
+                "    ],\n" +
+                "    \"remediation_notes\": \"If score < 60, provide a robust, bulleted crash-course exclusively teaching their weak points. If >= 60, output an empty string.\"\n" +
+                "}";
+            const response = await callGemini([{ role: 'user', content: prompt }]);
 
             let jsonStr = response.choices?.[0]?.message?.content || "{}";
             const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 jsonStr = jsonMatch[0];
             } else {
-                jsonStr = jsonStr.replace(/```json | ```/g, '').trim();
+                jsonStr = jsonStr.replace(new RegExp('\\x60\\x60\\x60(?:json)?', 'gi'), '').trim();
             }
 
             const data = JSON.parse(jsonStr);
@@ -130,14 +129,14 @@ const MasteryLoop = ({ initialQuiz, onMastery, contextText, topic }) => {
             // Generate Flashcards while they enter step
             try {
                 const prompt = "Generate 4 intense, highly targeted flashcards to help a student memorize these exact concepts they failed in a quiz: [" + feedback.join(", ") + "].\n" +
-                "Output strictly as a JSON object: { \"flashcards\": [{ \"question\": \"...\", \"answer\": \"...\" }] }";
-                const r = await callGeminiDirect([{ role: 'user', content: prompt }]);
-                
+                    "Output strictly as a JSON object: { \"flashcards\": [{ \"question\": \"...\", \"answer\": \"...\" }] }";
+                const r = await callGemini([{ role: 'user', content: prompt }]);
+
                 let jStr = r.choices?.[0]?.message?.content || "{}";
                 const jMatch = jStr.match(/\{[\s\S]*\}/);
                 if (jMatch) jStr = jMatch[0];
-                else jStr = jStr.replace(/```json | ```/g, '').trim();
-                
+                else jStr = jStr.replace(new RegExp('\\x60\\x60\\x60(?:json)?', 'gi'), '').trim();
+
                 setRemediationFlashcards(JSON.parse(jStr).flashcards);
             } catch (e) {
                 console.error("Flashcards failed", e);
@@ -157,7 +156,7 @@ const MasteryLoop = ({ initialQuiz, onMastery, contextText, topic }) => {
         const [flipped, setFlipped] = useState(false);
         return (
             <div onClick={() => setFlipped(!flipped)} className="relative h-48 w-full cursor-pointer perspective-1000 group">
-                <div className={`relative w - full h - full transition - all duration - 500 preserve - 3d ${ flipped ? 'rotate-y-180' : '' } `}>
+                <div className={`relative w - full h - full transition - all duration - 500 preserve - 3d ${flipped ? 'rotate-y-180' : ''} `}>
                     <div className="absolute inset-0 backface-hidden p-6 rounded-2xl bg-slate-800 border border-slate-700 flex flex-col justify-center items-center text-center">
                         <Brain className="w-6 h-6 text-orange-500/50 mb-3" />
                         <h4 className="font-bold text-slate-200">{card.question}</h4>
@@ -262,7 +261,7 @@ const MasteryLoop = ({ initialQuiz, onMastery, contextText, topic }) => {
                                     <span className="bg-orange-500 text-white w-6 h-6 rounded-full inline-flex items-center justify-center text-xs">2</span>
                                     Flashcard Review
                                 </h4>
-                                
+
                                 <div className="p-8 pb-12 bg-slate-900 rounded-2xl border border-orange-500/30">
                                     <div className="text-center mb-8">
                                         <Trophy className="w-12 h-12 text-orange-500/50 mx-auto mb-4" />
@@ -284,13 +283,12 @@ const MasteryLoop = ({ initialQuiz, onMastery, contextText, topic }) => {
                         <button
                             onClick={advanceRemediation}
                             disabled={timer > 0}
-                            className={`w - full py - 5 rounded - 2xl font - black text - lg transition - all transform hover: scale - [1.02] active: scale - 95 flex items - center justify - center gap - 3 ${
-    timer > 0
-        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-        : 'bg-gradient-to-r from-red-500 to-orange-600 text-white shadow-xl shadow-red-500/30'
-} `}
+                            className={`w - full py - 5 rounded - 2xl font - black text - lg transition - all transform hover: scale - [1.02] active: scale - 95 flex items - center justify - center gap - 3 ${timer > 0
+                                ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                                : 'bg-gradient-to-r from-red-500 to-orange-600 text-white shadow-xl shadow-red-500/30'
+                                } `}
                         >
-                            {timer > 0 ? `REQUIRED REVIEW(${ timer }s)` : (remediationStep === 0 ? 'PROCEED TO FLASHCARDS' : 'RETAKE ASSESSMENT')}
+                            {timer > 0 ? `REQUIRED REVIEW(${timer}s)` : (remediationStep === 0 ? 'PROCEED TO FLASHCARDS' : 'RETAKE ASSESSMENT')}
                             {timer === 0 && <ChevronRight className="w-5 h-5" />}
                         </button>
                     </div>
@@ -321,11 +319,10 @@ const MasteryLoop = ({ initialQuiz, onMastery, contextText, topic }) => {
                                     <button
                                         key={idx}
                                         onClick={() => handleAnswer(i, opt)}
-                                        className={`p - 4 rounded - 2xl text - left transition - all border font - medium text - sm flex items - center justify - between ${
-    answers[i] === opt
-        ? 'border-orange-500 bg-orange-500/10 text-orange-500 shadow-lg shadow-orange-500/5'
-        : 'border-slate-800 hover:border-slate-700 hover:bg-slate-800/50 text-slate-400'
-} `}
+                                        className={`p - 4 rounded - 2xl text - left transition - all border font - medium text - sm flex items - center justify - between ${answers[i] === opt
+                                            ? 'border-orange-500 bg-orange-500/10 text-orange-500 shadow-lg shadow-orange-500/5'
+                                            : 'border-slate-800 hover:border-slate-700 hover:bg-slate-800/50 text-slate-400'
+                                            } `}
                                     >
                                         <span>{opt}</span>
                                         {answers[i] === opt && <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center"><Check className="w-3 h-3 text-white" /></div>}
