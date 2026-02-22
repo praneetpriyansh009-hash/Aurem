@@ -755,7 +755,7 @@ Be constructive but honest. Reference specific lines from the text.`,
 
                     {/* ═══ CHAT TAB ═══ */}
                     {activeTab === 'chat' && (
-                        <div className={`animate-fade-in flex flex-col glass-panel rounded-3xl shadow-2xl border ${isDark ? 'border-white/10' : 'border-gray-200'} h-[600px] overflow-hidden`}>
+                        <div className={`animate-fade-in flex flex-col glass-panel rounded-3xl shadow-2xl border ${isDark ? 'border-white/10' : 'border-gray-200'} h-[75vh] md:h-[600px] overflow-hidden`}>
                             <div className={`p-3 border-b ${isDark ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-white/50'} flex items-center gap-3`}>
                                 <MessageSquare className={`w-5 h-5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`} />
                                 <span className="font-bold text-sm">Admissions AI Assistant</span>

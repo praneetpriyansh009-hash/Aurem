@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, googleProvider } from '../firebase';
-import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithPopup, signOut, onAuthStateChanged, getAdditionalUserInfo } from 'firebase/auth';
 
 const AuthContext = createContext();
 
@@ -13,6 +13,10 @@ export const AuthProvider = ({ children }) => {
     const loginWithGoogle = async () => {
         try {
             const result = await signInWithPopup(auth, googleProvider);
+            const additionalInfo = getAdditionalUserInfo(result);
+            if (additionalInfo && additionalInfo.isNewUser) {
+                localStorage.setItem('showOnboarding', 'true');
+            }
             return result.user;
         } catch (error) {
             console.error("Google Sign In Error:", error);

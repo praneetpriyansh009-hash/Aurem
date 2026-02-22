@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Send, FilePlus, Sparkles, BookOpen, Brain, CreditCard, MessageSquare, Loader2, Bot, User, Upload, Layers, Lightbulb, FileText, X, ChevronRight, Copy, Check, RefreshCw, Crown, ChevronLeft, Shuffle, Eye, Youtube, Trophy, AlertCircle, Play, Video, Target, Calendar, BrainCircuit } from './Icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
@@ -192,7 +193,7 @@ const renderInline = (text) => {
 };
 
 
-const DocumentStudy = () => {
+const DocumentStudy = ({ onNavigate }) => {
     const { isDark } = useTheme();
     const { retryableFetch } = useRetryableFetch();
     const { canUseFeature, incrementUsage, triggerUpgradeModal, isPro } = useSubscription();
@@ -282,13 +283,21 @@ RULES:
 - Include real-world applications and examples to aid understanding`;
 
     // --- Helpers: AI Communication ---
-    const callAI = async (prompt, systemPrompt, jsonMode = false) => {
+    const callAI = async (prompt, systemPrompt, jsonMode = false, includeImage = false) => {
         try {
+            let userContent = prompt;
+            if (includeImage && fileData) {
+                userContent = [
+                    { type: 'text', text: prompt },
+                    { type: 'image_url', image_url: { url: `data:${fileData.mimeType};base64,${fileData.data}` } }
+                ];
+            }
+
             const payload = {
                 model: "llama-3.3-70b-versatile",
                 messages: [
                     { role: 'system', content: systemPrompt || AUREM_LENS_SYSTEM_PROMPT },
-                    { role: 'user', content: prompt }
+                    { role: 'user', content: userContent }
                 ],
                 temperature: 0.4,
                 max_tokens: 8192,
@@ -601,18 +610,70 @@ The summary should be a concise, structured overview suitable for quick revision
         </div>
     );
 
-    const renderLoadingView = () => (
-        <div className="h-full flex flex-col items-center justify-center p-12 text-center">
-            <div className="relative mb-8">
-                <div className="w-24 h-24 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <Sparkles className="w-8 h-8 text-indigo-500 animate-pulse" />
+    // Immersive Animated Loading Component
+    const AnimatedLoadingView = () => {
+        const [loadingPhase, setLoadingPhase] = useState(0);
+        const phases = [
+            "Initializing cognitive engine...",
+            "Extracting core concepts...",
+            "Generating executive summaries...",
+            "Building spatial mind-maps...",
+            "Formulating adaptive assessments...",
+            "Synthesizing knowledge graph..."
+        ];
+
+        useEffect(() => {
+            const interval = setInterval(() => {
+                setLoadingPhase(prev => (prev + 1) % phases.length);
+            }, 3000);
+            return () => clearInterval(interval);
+        }, []);
+
+        return (
+            <div className={`h-full w-full flex flex-col items-center justify-center p-6 relative overflow-hidden`}>
+                {/* Deep Immersive Background */}
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-midnight-900 to-black z-0"></div>
+
+                {/* Floating Orbs */}
+                <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-violet-600/20 rounded-full blur-[100px] animate-pulse"></div>
+                <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-indigo-600/20 rounded-full blur-[100px] animate-pulse delay-1000"></div>
+
+                <div className="relative z-10 flex flex-col items-center backdrop-blur-sm p-12 rounded-[40px] border border-white/[0.05] bg-white/[0.02] shadow-2xl">
+                    <div className="relative mb-12">
+                        {/* Outer Glow Ring */}
+                        <div className="absolute -inset-4 rounded-full border border-indigo-500/30 animate-[spin_8s_linear_infinite] opacity-50"></div>
+                        {/* Middle Dashed Ring */}
+                        <div className="absolute -inset-2 rounded-full border-2 border-dashed border-violet-400/40 animate-[spin_5s_linear_reverse_infinite]"></div>
+                        {/* Inner Ring */}
+                        <div className="w-32 h-32 border-4 border-indigo-500/10 border-t-indigo-400 border-r-violet-500 rounded-full animate-spin shadow-[0_0_30px_rgba(99,102,241,0.3)]"></div>
+
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <BrainCircuit className="w-12 h-12 text-indigo-400 animate-pulse drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]" />
+                        </div>
+                    </div>
+
+                    <h2 className="text-3xl font-black mb-4 tracking-tight bg-gradient-to-r from-indigo-300 to-violet-300 bg-clip-text text-transparent">
+                        Ingesting Intelligence
+                    </h2>
+
+                    <div className="h-8 flex items-center justify-center overflow-hidden">
+                        <p
+                            key={loadingPhase}
+                            className="text-slate-400 font-medium tracking-wide animate-in slide-in-from-bottom-4 fade-in duration-500"
+                        >
+                            {phases[loadingPhase]}
+                        </p>
+                    </div>
+
+                    <div className="mt-10 w-64 h-1 bg-white/[0.05] rounded-full overflow-hidden">
+                        <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full animate-[progress_8s_ease-in-out_infinite] w-1/2"></div>
+                    </div>
                 </div>
             </div>
-            <h2 className="text-2xl font-bold mb-2">Ingesting Intelligence...</h2>
-            <p className="text-slate-500 max-w-sm">AUREM is distilling the content into a structured study environment.</p>
-        </div>
-    );
+        );
+    };
+
+    const renderLoadingView = () => <AnimatedLoadingView />;
 
     // ═══════════════════════════════════════════════
     // FULL-SCREEN CHAT VIEW
@@ -773,10 +834,26 @@ The summary should be a concise, structured overview suitable for quick revision
                     ))}
                 </nav>
 
-                <div className={`p-4 mt-auto border-t ${isDark ? 'border-white/[0.04]' : 'border-slate-200'}`}>
-                    <button onClick={() => setViewMode('input')} className="w-full flex items-center gap-3 p-3 text-slate-500 hover:text-red-400 font-bold text-sm">
-                        <ChevronLeft className="w-4 h-4" />
+                <div className={`p-4 mt-auto space-y-2 border-t ${isDark ? 'border-white/[0.04]' : 'border-slate-200'}`}>
+                    <button
+                        onClick={() => {
+                            setViewMode('input');
+                            setDocumentContent('');
+                            setFileData(null);
+                        }}
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold text-sm transition-colors ${isDark ? 'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                    >
+                        <RefreshCw className="w-4 h-4" />
                         {!isSidebarCollapsed && <span>New Session</span>}
+                    </button>
+                    <button
+                        onClick={() => {
+                            if (onNavigate) onNavigate('doubt-solver');
+                        }}
+                        className="w-full flex items-center gap-3 p-3 text-slate-500 hover:bg-red-500/10 hover:text-red-500 rounded-xl font-bold text-sm transition-colors"
+                    >
+                        <X className="w-4 h-4" />
+                        {!isSidebarCollapsed && <span>Exit to Main</span>}
                     </button>
                 </div>
             </aside>
@@ -968,11 +1045,19 @@ The summary should be a concise, structured overview suitable for quick revision
         </div>
     );
 
+    if (viewMode !== 'input') {
+        return createPortal(
+            <div className={`fixed inset-0 z-50 ${isDark ? 'bg-midnight-900 text-white' : 'bg-warm-50 text-slate-900'} transition-colors duration-300 font-sans`}>
+                {viewMode === 'loading' && renderLoadingView()}
+                {viewMode === 'study' && renderStudyMode()}
+            </div>,
+            document.body
+        );
+    }
+
     return (
         <div className={`h-full ${isDark ? 'bg-midnight-900 text-white' : 'bg-warm-50 text-slate-900'} transition-colors duration-300 font-sans`}>
-            {viewMode === 'input' && renderInputView()}
-            {viewMode === 'loading' && renderLoadingView()}
-            {viewMode === 'study' && renderStudyMode()}
+            {renderInputView()}
         </div>
     );
 };

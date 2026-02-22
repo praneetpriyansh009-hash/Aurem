@@ -61,7 +61,7 @@ const UpgradeModal = () => {
             />
 
             {/* Modal */}
-            <div className={`relative w-full max-w-lg rounded-[40px] overflow-hidden glass-3d glow-border animate-scale-in shadow-2xl
+            <div className={`relative w-full max-w-lg max-h-[95dvh] overflow-y-auto custom-scrollbar rounded-3xl md:rounded-[40px] glass-3d glow-border animate-scale-in shadow-2xl
                 ${isDark ? 'bg-midnight-900 border-white/[0.08]' : 'bg-white border-warm-200/50'}
             `}>
                 {/* Close Button */}

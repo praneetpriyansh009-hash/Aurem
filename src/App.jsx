@@ -22,6 +22,7 @@ import LoopManager from './components/LearnLoop/LoopManager';
 import LandingPageV2 from './components/LandingPageV2';
 import ExamHub from './components/ExamHub';
 import ErrorBoundary from './components/ErrorBoundary';
+import OnboardingGuide from './components/OnboardingGuide';
 
 // Floating particles background
 const FloatingParticles = () => (
@@ -56,6 +57,7 @@ const AppContent = () => {
     // Phase: 'splash' → 'landing'/'login'/'app' → ...
     const [phase, setPhase] = useState('splash');
     const [currentView, setCurrentView] = useState('doubt-solver');
+    const [showOnboarding, setShowOnboarding] = useState(false);
 
     const hasVisited = localStorage.getItem('hasVisited') === 'true';
 
@@ -63,6 +65,9 @@ const AppContent = () => {
     const handleSplashComplete = () => {
         if (currentUser) {
             setPhase('app');
+            if (localStorage.getItem('showOnboarding') === 'true') {
+                setShowOnboarding(true);
+            }
         } else {
             // Force landing page for now to ensure user sees the new overhaul
             setPhase('landing');
@@ -85,6 +90,9 @@ const AppContent = () => {
         if (currentUser && (phase === 'login' || phase === 'signup')) {
             setPhase('app');
             setCurrentView('doubt-solver');
+            if (localStorage.getItem('showOnboarding') === 'true') {
+                setShowOnboarding(true);
+            }
         }
     }, [currentUser, phase]);
 
@@ -99,12 +107,17 @@ const AppContent = () => {
         setPhase('login');
     };
 
+    const handleOnboardingComplete = () => {
+        setShowOnboarding(false);
+        localStorage.removeItem('showOnboarding');
+    };
+
     const renderContent = () => {
         switch (currentView) {
             case 'settings': return <Settings />;
             case 'learn-loop': return <LoopManager />;
             case 'doubt-solver': return <DoubtSolver retryableFetch={retryableFetch} />;
-            case 'document-study': return <DocumentStudy retryableFetch={retryableFetch} />;
+            case 'document-study': return <DocumentStudy retryableFetch={retryableFetch} onNavigate={setCurrentView} />;
             case 'college-compass': return <CollegeCompass retryableFetch={retryableFetch} />;
             case 'podcast-generator': return <PodcastGenerator retryableFetch={retryableFetch} />;
             case 'video-generator': return <VideoGenerator />;
@@ -176,7 +189,7 @@ const AppContent = () => {
 
     // ═══ MAIN APP ═══
     return (
-        <div className={`flex h-screen font-sans overflow-hidden transition-colors duration-500
+        <div className={`flex h-[100dvh] font-sans overflow-hidden transition-colors duration-500
             ${isDark ? 'bg-midnight-900' : 'bg-warm-50'}
         `}>
             {/* Global floating particles */}
@@ -188,6 +201,8 @@ const AppContent = () => {
             </div>
 
             <UpgradeModal />
+
+            {showOnboarding && <OnboardingGuide onComplete={handleOnboardingComplete} />}
 
             <Sidebar
                 currentView={currentView}
@@ -227,7 +242,7 @@ const AppContent = () => {
                     </h1>
                 </header>
 
-                <main className="flex-1 overflow-y-auto relative">
+                <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
                     <div key={currentView} className="h-full animate-page-enter">
                         {renderContent()}
                     </div>
