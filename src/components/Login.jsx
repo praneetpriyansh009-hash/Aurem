@@ -1,22 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AuremLogo } from './SplashScreen';
 import { X } from './Icons';
-
-// Generate shooting stars
-const generateStars = (count) => {
-    return Array.from({ length: count }, (_, i) => ({
-        id: i,
-        top: Math.random() * 100,
-        left: Math.random() * 60 - 10,
-        delay: Math.random() * 6,
-        duration: 1 + Math.random() * 2,
-        size: 1 + Math.random() * 1.5,
-        angle: 25 + Math.random() * 30,
-        opacity: 0.3 + Math.random() * 0.5,
-    }));
-};
 
 const Login = ({ onSwitchToSignup }) => {
     const [error, setError] = useState('');
@@ -24,7 +10,6 @@ const Login = ({ onSwitchToSignup }) => {
     const { isDark } = useTheme();
     const [loading, setLoading] = useState(false);
     const cardRef = useRef(null);
-    const [stars] = useState(() => generateStars(25));
 
     const handleMouseMove = (e) => {
         if (!cardRef.current) return;
@@ -62,43 +47,22 @@ const Login = ({ onSwitchToSignup }) => {
     };
 
     return (
-        <div className="min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden"
-            style={{
-                background: 'linear-gradient(145deg, #050510 0%, #0d0d2b 30%, #0a0a1a 60%, #050510 100%)'
-            }}
-        >
-            {/* Shooting Stars */}
+        <div className="min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden cursor-none bg-theme-bg">
+            {/* Ambient orbs using theme colors */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                {stars.map(star => (
-                    <div
-                        key={star.id}
-                        className="absolute rounded-full"
-                        style={{
-                            top: `${star.top}%`,
-                            left: `${star.left}%`,
-                            width: `${star.size}px`,
-                            height: `${star.size}px`,
-                            background: '#818cf8',
-                            boxShadow: `0 0 ${star.size * 3}px ${star.size}px rgba(129,140,248,0.5), -${star.size * 15}px 0 ${star.size * 10}px ${star.size * 0.5}px rgba(129,140,248,0.2)`,
-                            transform: `rotate(${star.angle}deg)`,
-                            animation: `loginStar ${star.duration}s ${star.delay}s ease-in infinite`,
-                            opacity: 0,
-                        }}
-                    />
-                ))}
-            </div>
-
-            {/* Ambient orbs */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[20%] left-[20%] w-[400px] h-[400px] rounded-full blur-[150px] bg-indigo-600/10" style={{ animation: 'floatSlow 12s ease-in-out infinite' }} />
-                <div className="absolute bottom-[15%] right-[15%] w-[350px] h-[350px] rounded-full blur-[130px] bg-violet-600/8" style={{ animation: 'floatSlow 15s ease-in-out infinite', animationDelay: '-5s' }} />
-                <div className="absolute top-8 right-20 w-20 h-20 rounded-full blur-2xl opacity-30 bg-indigo-500/30" style={{ animation: 'floatSlow 8s ease-in-out infinite' }} />
-                <div className="absolute bottom-12 left-12 w-28 h-28 rounded-full blur-2xl opacity-20 bg-violet-500/20" style={{ animation: 'floatSlow 10s ease-in-out infinite', animationDelay: '2s' }} />
+                <div className="absolute top-[20%] left-[20%] w-[400px] h-[400px] rounded-full blur-[150px]"
+                    style={{ background: 'rgba(var(--theme-primary), 0.08)', animation: 'auth-float 12s ease-in-out infinite' }} />
+                <div className="absolute bottom-[15%] right-[15%] w-[350px] h-[350px] rounded-full blur-[130px]"
+                    style={{ background: 'rgba(var(--theme-secondary), 0.05)', animation: 'auth-float 15s ease-in-out infinite', animationDelay: '-5s' }} />
+                <div className="absolute top-8 right-20 w-20 h-20 rounded-full blur-2xl opacity-20"
+                    style={{ background: 'rgba(var(--theme-primary), 0.2)', animation: 'auth-float 8s ease-in-out infinite' }} />
+                <div className="absolute bottom-12 left-12 w-28 h-28 rounded-full blur-2xl opacity-15"
+                    style={{ background: 'rgba(var(--theme-primary), 0.15)', animation: 'auth-float 10s ease-in-out infinite', animationDelay: '2s' }} />
             </div>
 
             {/* Grid overlay */}
             <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{
-                backgroundImage: 'linear-gradient(rgba(129,140,248,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(129,140,248,0.5) 1px, transparent 1px)',
+                backgroundImage: 'linear-gradient(rgba(var(--theme-primary), 0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(var(--theme-primary), 0.5) 1px, transparent 1px)',
                 backgroundSize: '60px 60px',
             }} />
 
@@ -107,34 +71,47 @@ const Login = ({ onSwitchToSignup }) => {
                 ref={cardRef}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
-                className="w-full max-w-[400px] relative group transition-transform duration-200 ease-out z-10"
-                style={{ transform: 'perspective(1200px)', transformStyle: 'preserve-3d' }}
+                className="w-full max-w-[440px] relative group transition-all duration-500 ease-out z-10"
+                style={{ transform: 'perspective(2000px)', transformStyle: 'preserve-3d' }}
             >
                 {/* Glow behind card */}
-                <div className="absolute -inset-1.5 rounded-3xl blur-xl transition duration-700 bg-gradient-to-r from-indigo-500/15 via-violet-500/15 to-purple-500/15 group-hover:opacity-100 opacity-40" />
+                <div className="absolute -inset-4 rounded-[40px] blur-3xl transition duration-1000 group-hover:opacity-100 opacity-20 animate-pulse"
+                    style={{ background: 'linear-gradient(135deg, rgba(var(--theme-primary), 0.15), rgba(var(--theme-secondary), 0.1))' }} />
 
                 {/* Card */}
-                <div className="relative p-10 rounded-3xl flex flex-col items-center text-center backdrop-blur-xl border bg-[#0d0d25]/80 border-white/[0.06] shadow-2xl shadow-indigo-500/5">
+                <div className="relative p-12 rounded-[40px] flex flex-col items-center text-center border shadow-2xl shadow-black/60 bg-theme-surface border-theme-primary/10"
+                    style={{ backdropFilter: 'blur(24px)' }}
+                >
+                    {/* Accent bar */}
+                    <div className="absolute top-0 left-0 w-full h-0.5 rounded-t-[40px]"
+                        style={{ background: 'linear-gradient(90deg, transparent, rgba(var(--theme-primary),1), transparent)' }} />
+
+                    {/* Light Sweep Effect */}
+                    <div className="absolute inset-0 rounded-[40px] overflow-hidden pointer-events-none">
+                        <div className="absolute -inset-[100%] bg-gradient-to-tr from-transparent via-white/[0.02] to-transparent rotate-45 group-hover:translate-x-[200%] transition-transform duration-1000 ease-in-out" />
+                    </div>
+
                     {/* Logo */}
                     <div className="mb-8 relative">
                         <div className="relative">
                             <AuremLogo className="w-20 h-20" />
-                            <div className="absolute -inset-4 bg-indigo-500/15 rounded-full blur-2xl -z-10" style={{ animation: 'pulse 3s ease-in-out infinite' }} />
+                            <div className="absolute -inset-4 rounded-full blur-2xl -z-10"
+                                style={{ background: 'rgba(var(--theme-primary), 0.12)', animation: 'pulse 3s ease-in-out infinite' }} />
                         </div>
                     </div>
 
-                    <h2 className="text-3xl font-display font-extrabold mb-2 tracking-tight text-white">
+                    <h2 className="text-3xl font-serif italic mb-2 tracking-wide text-theme-text">
                         Welcome to{' '}
-                        <span className="bg-gradient-to-r from-indigo-300 to-violet-300 bg-clip-text text-transparent">Aurem</span>
+                        <span className="text-theme-primary">Aurem</span>
                     </h2>
 
-                    <p className="text-sm mb-8 leading-relaxed max-w-[280px] text-white/35">
+                    <p className="text-sm mb-8 leading-relaxed max-w-[280px] text-theme-muted">
                         Where curiosity becomes clarity.
                         <br />Your AI-powered study companion.
                     </p>
 
                     {error && (
-                        <div className="mb-6 w-full p-3 rounded-xl bg-red-500/10 border border-red-500/15 flex items-center gap-3 text-red-400 text-xs text-left animate-scale-in">
+                        <div className="mb-6 w-full p-3 rounded-xl bg-red-500/10 border border-red-500/15 flex items-center gap-3 text-red-400 text-xs text-left">
                             <X className="w-4 h-4 flex-shrink-0" />
                             <p>{error}</p>
                         </div>
@@ -146,12 +123,12 @@ const Login = ({ onSwitchToSignup }) => {
                             disabled={loading}
                             className="group relative w-full flex items-center justify-center gap-3 px-5 py-4 rounded-2xl font-semibold
                                 transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99]
-                                disabled:opacity-60 disabled:cursor-not-allowed
-                                bg-white text-gray-900 hover:shadow-lg hover:shadow-white/10
+                                disabled:opacity-60 disabled:cursor-not-allowed cursor-none
+                                bg-theme-primary text-theme-bg hover:opacity-90 shadow-lg
                             "
                         >
                             {loading ? (
-                                <div className="w-5 h-5 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
+                                <div className="w-5 h-5 border-2 border-theme-bg/30 border-t-theme-bg rounded-full animate-spin" />
                             ) : (
                                 <>
                                     <svg className="w-5 h-5 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
@@ -164,7 +141,7 @@ const Login = ({ onSwitchToSignup }) => {
                     </div>
 
                     {/* Footer */}
-                    <div className="mt-10 pt-6 w-full flex justify-between items-center text-[11px] border-t border-white/[0.04] text-white/20">
+                    <div className="mt-10 pt-6 w-full flex justify-between items-center text-[11px] border-t border-theme-border text-theme-muted" style={{ opacity: 0.4 }}>
                         <span className="font-medium">Aurem v2.0</span>
                         <div className="flex items-center gap-1.5">
                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -175,13 +152,7 @@ const Login = ({ onSwitchToSignup }) => {
             </div>
 
             <style>{`
-                @keyframes loginStar {
-                    0% { transform: rotate(var(--angle, 35deg)) translateX(0); opacity: 0; }
-                    3% { opacity: var(--star-opacity, 0.7); }
-                    60% { opacity: 0.3; }
-                    100% { transform: rotate(var(--angle, 35deg)) translateX(400px); opacity: 0; }
-                }
-                @keyframes floatSlow {
+                @keyframes auth-float {
                     0%, 100% { transform: translate(0, 0); }
                     50% { transform: translate(15px, -20px); }
                 }

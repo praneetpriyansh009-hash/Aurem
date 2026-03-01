@@ -20,8 +20,49 @@
   }
 
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    /* overflow: hidden; removed to fix scrolling */
+    font-family: 'Jost', system-ui, -apple-system, sans-serif;
+    background: rgb(var(--theme-bg));
+    color: rgb(var(--theme-text));
+    overflow-x: hidden;
+    cursor: none;
+    /* Hide default cursor for Luminary custom cursor */
+  }
+
+  /* Luminary Grain Overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.06'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.6;
+  }
+
+  /* Luminary Custom Cursor */
+  .cursor-dot {
+    position: fixed;
+    width: 8px;
+    height: 8px;
+    background: var(--gold);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    transition: background 0.3s;
+  }
+
+  .cursor-circle {
+    position: fixed;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--gold);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9998;
+    transform: translate(-50%, -50%);
+    transition: width 0.3s, height 0.3s, opacity 0.3s;
+    opacity: 0.5;
   }
 
   h1,
@@ -30,220 +71,82 @@
   h4,
   h5,
   h6 {
-    font-family: 'Outfit', 'Inter', sans-serif;
+    font-family: 'Cormorant Garamond', 'Georgia', serif;
   }
 
   /* =============================================
-     THEME VARIABLES — WARM LIGHT MODE (Default)
-     Premium ivory/cream — NOT harsh white
+     THEME VARIABLES (Dynamic Architecture)
      ============================================= */
+
+  /* --- LEGACY COLORS (used by LandingPageV2) --- */
   :root {
-    /* === CORE COLORS (HSL) === */
-    --theme-bg-h: 250;
-    --theme-bg-s: 15%;
-    --theme-bg-l: 98%;
-    --theme-bg: var(--theme-bg-h) var(--theme-bg-s) var(--theme-bg-l);
+    --gold: #c9a55a;
+    --gold-light: #e0c07a;
+    --cream: #f0e8d8;
+    --bark: #eaddd7;
+    --bark-mid: #a89880;
+    --bark-light: #D5C2AD;
+    --bg: #0e0b07;
+    --surface: #141009;
+    --border: rgba(201, 165, 90, 0.12);
 
-    --theme-surface-h: 250;
-    --theme-surface-s: 10%;
-    --theme-surface-l: 95%;
-    --theme-surface: var(--theme-surface-h) var(--theme-surface-s) var(--theme-surface-l);
-
-    --theme-text-h: 250;
-    --theme-text-s: 30%;
-    --theme-text-l: 12%;
-    --theme-text: var(--theme-text-h) var(--theme-text-s) var(--theme-text-l);
-
-    --theme-muted-h: 250;
-    --theme-muted-s: 10%;
-    --theme-muted-l: 45%;
-    --theme-muted: var(--theme-muted-h) var(--theme-muted-s) var(--theme-muted-l);
-
-    --theme-primary-h: 260;
-    --theme-primary-s: 90%;
-    --theme-primary-l: 65%;
-    --theme-primary: var(--theme-primary-h) var(--theme-primary-s) var(--theme-primary-l);
-
-    --theme-secondary-h: 190;
-    --theme-secondary-s: 90%;
-    --theme-secondary-l: 45%;
-    --theme-secondary: var(--theme-secondary-h) var(--theme-secondary-s) var(--theme-secondary-l);
-
-    --theme-accent-h: 330;
-    --theme-accent-s: 90%;
-    --theme-accent-l: 60%;
-    --theme-accent: var(--theme-accent-h) var(--theme-accent-s) var(--theme-accent-l);
-
-    --theme-border: 250 15% 90%;
-    --theme-hover: 250 15% 94%;
-    --glass-bg: 255 255 255 / 0.7;
-    --glass-border: 255 255 255 / 0.5;
-    --shadow-color: 250 30% 10%;
-    --shadow-opacity: 0.05;
-
-    /* Ambient Aurora Colors */
-    --aurora-1: 260 90% 80% / 0.2;
-    --aurora-2: 190 90% 70% / 0.15;
-    --aurora-3: 330 90% 75% / 0.1;
+    /* Default theme vars (= Premium Gold). Class selectors below override these. */
+    --theme-bg: 14, 11, 7;
+    --theme-surface: 20, 16, 9;
+    --theme-text: 240, 232, 216;
+    --theme-muted: 168, 152, 128;
+    --theme-primary: 201, 165, 90;
+    --theme-secondary: 224, 192, 122;
+    --theme-border: 201, 165, 90;
+    --aurora-1: 35, 100%, 50%;
+    --aurora-2: 45, 100%, 50%;
+    --aurora-3: 15, 100%, 50%;
   }
 
-  .dark {
-    --theme-bg-h: 250;
-    --theme-bg-s: 25%;
-    --theme-bg-l: 4%;
-    --theme-bg: var(--theme-bg-h) var(--theme-bg-s) var(--theme-bg-l);
-
-    --theme-surface-h: 250;
-    --theme-surface-s: 20%;
-    --theme-surface-l: 10%;
-    --theme-surface: var(--theme-surface-h) var(--theme-surface-s) var(--theme-surface-l);
-
-    --theme-text-h: 250;
-    --theme-text-s: 10%;
-    --theme-text-l: 92%;
-    --theme-text: var(--theme-text-h) var(--theme-text-s) var(--theme-text-l);
-
-    --theme-muted-h: 250;
-    --theme-muted-s: 15%;
-    --theme-muted-l: 65%;
-    --theme-muted: var(--theme-muted-h) var(--theme-muted-s) var(--theme-muted-l);
-
-    --theme-border: 255 255 255 / 0.08;
-    --theme-hover: 255 255 255 / 0.1;
-    --glass-bg: 15 15 25 / 0.6;
-    --glass-border: 255 255 255 / 0.1;
-    --shadow-opacity: 0.4;
-
-    /* Dark Aurora Colors */
-    --aurora-1: 260 90% 50% / 0.12;
-    --aurora-2: 190 90% 40% / 0.1;
-    --aurora-3: 330 90% 45% / 0.08;
+  /* --- PREMIUM THEME (Gold & Deep Blacks) --- */
+  /* :root.theme-X has specificity 0,2,0 beating :root 0,1,0 */
+  :root.theme-premium,
+  body.theme-premium {
+    --theme-bg: 14, 11, 7;
+    --theme-surface: 20, 16, 9;
+    --theme-text: 240, 232, 216;
+    --theme-muted: 168, 152, 128;
+    --theme-primary: 201, 165, 90;
+    --theme-secondary: 224, 192, 122;
+    --theme-border: 201, 165, 90;
+    --aurora-1: 35, 100%, 50%;
+    --aurora-2: 45, 100%, 50%;
+    --aurora-3: 15, 100%, 50%;
   }
 
-  /* === THEME VARIANT: SUNSET === */
-  .theme-sunset {
-    --theme-bg: 255 250 243;
-    --theme-surface: 255 243 230;
-    --theme-text: 67 20 7;
-    --theme-muted: 154 110 80;
-    --theme-primary: 249 115 22;
-    --theme-secondary: 225 29 72;
-    --theme-border: 255 220 190;
+  /* --- VIBRANT THEME (Funky - Bright Indigos & Pink) --- */
+  :root.theme-vibrant,
+  body.theme-vibrant {
+    --theme-bg: 15, 23, 42;
+    --theme-surface: 30, 41, 59;
+    --theme-text: 248, 250, 252;
+    --theme-muted: 148, 163, 184;
+    --theme-primary: 139, 92, 246;
+    --theme-secondary: 236, 72, 153;
+    --theme-border: 139, 92, 246;
+    --aurora-1: 260, 80%, 60%;
+    --aurora-2: 320, 80%, 60%;
+    --aurora-3: 200, 80%, 60%;
   }
 
-  .dark.theme-sunset {
-    --theme-bg: 20 10 5;
-    --theme-surface: 35 18 10;
-    --theme-text: 255 237 213;
-    --theme-muted: 200 150 100;
-    --theme-primary: 249 115 22;
-    --theme-secondary: 225 29 72;
-    --theme-border: 255 255 255 / 0.06;
-  }
-
-  /* === THEME VARIANT: FOREST === */
-  .theme-forest {
-    --theme-bg: 245 252 248;
-    --theme-surface: 236 250 240;
-    --theme-text: 6 78 59;
-    --theme-muted: 60 120 90;
-    --theme-primary: 16 185 129;
-    --theme-secondary: 13 148 136;
-    --theme-border: 200 235 215;
-  }
-
-  .dark.theme-forest {
-    --theme-bg: 5 20 15;
-    --theme-surface: 10 35 25;
-    --theme-text: 236 253 245;
-    --theme-muted: 100 200 160;
-    --theme-primary: 16 185 129;
-    --theme-secondary: 13 148 136;
-    --theme-border: 255 255 255 / 0.06;
-  }
-
-  /* === THEME VARIANT: LAVENDER === */
-  .theme-lavender {
-    --theme-bg: 250 247 255;
-    --theme-surface: 243 238 255;
-    --theme-text: 58 28 100;
-    --theme-muted: 120 90 170;
-    --theme-primary: 139 92 246;
-    --theme-secondary: 192 132 252;
-    --theme-border: 220 210 245;
-  }
-
-  .dark.theme-lavender {
-    --theme-bg: 12 7 24;
-    --theme-surface: 22 14 42;
-    --theme-text: 243 232 255;
-    --theme-muted: 180 160 220;
-    --theme-primary: 139 92 246;
-    --theme-secondary: 192 132 252;
-    --theme-border: 255 255 255 / 0.06;
-  }
-
-  /* === THEME VARIANT: ROSE === */
-  .theme-rose {
-    --theme-bg: 255 248 249;
-    --theme-surface: 255 240 242;
-    --theme-text: 100 20 40;
-    --theme-muted: 160 80 100;
-    --theme-primary: 244 63 94;
-    --theme-secondary: 236 72 153;
-    --theme-border: 255 220 225;
-  }
-
-  .dark.theme-rose {
-    --theme-bg: 18 5 10;
-    --theme-surface: 30 10 18;
-    --theme-text: 255 228 230;
-    --theme-muted: 200 130 150;
-    --theme-primary: 244 63 94;
-    --theme-secondary: 236 72 153;
-    --theme-border: 255 255 255 / 0.06;
-  }
-
-  /* === THEME VARIANT: SLATE === */
-  .theme-slate {
-    --theme-bg: 248 250 252;
-    --theme-surface: 241 245 249;
-    --theme-text: 15 23 42;
-    --theme-muted: 100 116 139;
-    --theme-primary: 100 116 139;
-    --theme-secondary: 71 85 105;
-    --theme-border: 226 232 240;
-  }
-
-  .dark.theme-slate {
-    --theme-bg: 2 6 23;
-    --theme-surface: 15 23 42;
-    --theme-text: 241 245 249;
-    --theme-muted: 148 163 184;
-    --theme-primary: 148 163 184;
-    --theme-secondary: 203 213 225;
-    --theme-border: 255 255 255 / 0.06;
-  }
-
-  /* === THEME VARIANT: AMBER === */
-  .theme-amber {
-    --theme-bg: 255 252 240;
-    --theme-surface: 255 248 225;
-    --theme-text: 69 26 3;
-    --theme-muted: 160 120 60;
-    --theme-primary: 245 158 11;
-    --theme-secondary: 234 179 8;
-    --theme-border: 255 235 200;
-  }
-
-  .dark.theme-amber {
-    --theme-bg: 20 12 5;
-    --theme-surface: 35 25 12;
-    --theme-text: 254 243 199;
-    --theme-muted: 200 170 100;
-    --theme-primary: 245 158 11;
-    --theme-secondary: 253 224 71;
-    --theme-border: 255 255 255 / 0.06;
+  /* --- SIMPLE THEME (Basalt - Claude AI Dark Mode) --- */
+  :root.theme-simple,
+  body.theme-simple {
+    --theme-bg: 30, 30, 30;
+    --theme-surface: 44, 44, 44;
+    --theme-text: 225, 225, 225;
+    --theme-muted: 156, 153, 147;
+    --theme-primary: 217, 119, 87;
+    --theme-secondary: 230, 144, 116;
+    --theme-border: 225, 225, 225;
+    --aurora-1: 20, 10%, 40%;
+    --aurora-2: 30, 10%, 30%;
+    --aurora-3: 0, 0%, 20%;
   }
 }
 
@@ -252,41 +155,14 @@
    ============================================= */
 @layer components {
 
-  /* --- Semantic Background Utilities --- */
-  .bg-theme-primary {
-    background-color: rgb(var(--theme-bg));
-  }
-
-  .bg-theme-surface {
-    background-color: rgb(var(--theme-surface));
-  }
-
-  .text-theme-primary {
-    color: rgb(var(--theme-primary));
-  }
-
-  .text-theme-secondary {
-    color: rgb(var(--theme-secondary));
-  }
-
-  .text-theme-text {
-    color: rgb(var(--theme-text));
-  }
-
-  .text-theme-muted {
-    color: rgb(var(--theme-muted));
-  }
-
-  .border-theme {
-    border-color: rgb(var(--theme-border));
-  }
+  /* --- Semantic Background Utilities are now dynamically mapped in Tailwind Config --- */
 
   /* --- GLASSMORPHISM v2 --- */
   .aurora-bg {
     position: fixed;
     inset: 0;
     z-index: -1;
-    background: hsl(var(--theme-bg));
+    background: rgb(var(--theme-bg));
     overflow: hidden;
   }
 
@@ -349,13 +225,35 @@
   }
 
   .glass-3d {
-    background: hsla(var(--theme-surface) / 0.4);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid hsla(var(--theme-border) / 1);
+    background: rgba(var(--theme-surface), 0.4);
+    backdrop-filter: blur(24px) saturate(190%);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
+    border: 1px solid rgba(var(--theme-border), 0.8);
     box-shadow:
-      0 8px 32px 0 hsla(var(--shadow-color) / var(--shadow-opacity)),
-      inset 0 0 0 1px hsla(255, 255%, 100%, 0.1);
+      0 12px 40px -12px rgba(var(--theme-surface), 0.5),
+      inset 0 0 0 1px rgba(var(--theme-primary), 0.1);
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-3d-elevated {
+    background: rgba(var(--theme-surface), 0.6);
+    backdrop-filter: blur(32px) saturate(210%);
+    -webkit-backdrop-filter: blur(32px) saturate(210%);
+    border: 1px solid rgba(var(--theme-primary), 0.2);
+    box-shadow:
+      0 25px 60px -15px rgba(var(--theme-surface), 0.8),
+      0 0 20px rgba(var(--theme-primary), 0.1),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    transform: translateZ(20px);
+    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .glass-3d-elevated:hover {
+    box-shadow:
+      0 35px 80px -20px rgba(var(--theme-surface), 0.9),
+      0 0 30px rgba(var(--theme-primary), 0.2),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+    transform: translateZ(40px) scale(1.02);
   }
 
   .glow-border {
@@ -368,7 +266,7 @@
     inset: -1px;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(135deg, hsla(var(--theme-primary) / 0.5), hsla(var(--theme-secondary) / 0.5));
+    background: linear-gradient(135deg, rgba(var(--theme-primary), 0.5), rgba(var(--theme-secondary), 0.5));
     -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
@@ -397,7 +295,7 @@
     background: linear-gradient(45deg,
         transparent 0%,
         transparent 40%,
-        hsla(var(--theme-primary) / 0.1) 50%,
+        rgba(var(--theme-primary), 0.1) 50%,
         transparent 60%,
         transparent 100%);
     transform: rotate(45deg);
@@ -415,11 +313,11 @@
   }
 
   .text-glow-primary {
-    text-shadow: 0 0 10px hsla(var(--theme-primary) / 0.3);
+    text-shadow: 0 0 10px rgba(var(--theme-primary), 0.3);
   }
 
   .shadow-glow {
-    box-shadow: 0 0 20px hsla(var(--theme-primary) / 0.15);
+    box-shadow: 0 0 20px rgba(var(--theme-primary), 0.15);
   }
 
   .glass-card {
@@ -504,6 +402,19 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
+  }
+
+  /* --- Cinematic Typography --- */
+  .tracking-tightest {
+    letter-spacing: -0.05em;
+  }
+
+  .font-black-tight {
+    @apply font-black tracking-tightest leading-none;
+  }
+
+  .text-title-fluid {
+    @apply text-3xl md:text-5xl lg:text-6xl font-black-tight;
   }
 
   /* --- Animated Gradient Border --- */
@@ -754,8 +665,46 @@
   }
 }
 
+@keyframes pageZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateZ(-50px);
+    filter: blur(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateZ(0);
+    filter: blur(0);
+  }
+}
+
 .animate-page-enter {
-  animation: pageEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: pageZoomIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Neural Background Particles */
+@keyframes neuralPulse {
+
+  0%,
+  100% {
+    transform: scale(1) translate(0, 0);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: scale(1.2) translate(10px, -10px);
+    opacity: 0.6;
+  }
+}
+
+.neural-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, hsla(var(--theme-primary) / 0.4), transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+  mix-blend-mode: screen;
 }
 
 /* Gradient background animation */
@@ -1061,4 +1010,150 @@
 
 .animate-scale-in {
   animation: scaleIn 0.3s ease-out;
+}
+
+/* --- Neural Colosseum Elite Animations --- */
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+
+  100% {
+    transform: translateY(1000%);
+  }
+}
+
+.animate-scanner {
+  animation: scanline 3s linear infinite;
+}
+
+@keyframes neuralPulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+
+  50% {
+    transform: scale(1.05);
+    filter: brightness(1.3);
+  }
+}
+
+.animate-neural-pulse {
+  animation: neuralPulse 2s infinite ease-in-out;
+}
+
+@keyframes glitch {
+  0% {
+    transform: translate(0);
+    text-shadow: -2px 0 #ff00c1, 2px 0 #00fff9;
+  }
+
+  25% {
+    transform: translate(-2px, 2px);
+  }
+
+  50% {
+    transform: translate(2px, -2px);
+    text-shadow: 2px 0 #ff00c1, -2px 0 #00fff9;
+  }
+
+  75% {
+    transform: translate(-2px, -2px);
+  }
+
+  100% {
+    transform: translate(0);
+  }
+}
+
+.glitch-text {
+  animation: glitch 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+}
+
+@keyframes progressShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-progress-shimmer {
+  background: linear-gradient(90deg,
+      rgba(99, 102, 241, 0.4) 25%,
+      rgba(168, 85, 247, 0.6) 50%,
+      rgba(99, 102, 241, 0.4) 75%);
+  background-size: 200% 100%;
+  animation: progressShimmer 3s infinite linear;
+}
+
+/* =============================================
+   ARENA COMBAT ANIMATIONS
+   ============================================= */
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-4px) rotate(-1deg);
+  }
+
+  50% {
+    transform: translateX(4px) rotate(1deg);
+  }
+
+  75% {
+    transform: translateX(-4px) rotate(-1deg);
+  }
+}
+
+.animate-shake {
+  animation: shake 0.2s cubic-bezier(.36, .07, .19, .97) both;
+}
+
+@keyframes scanner {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 0.8;
+  }
+
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+.animate-scanner {
+  animation: scanner 3s linear infinite;
+}
+
+@keyframes neural-pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+
+  50% {
+    transform: scale(1.1);
+    opacity: 0.6;
+  }
+}
+
+.animate-neural-pulse {
+  animation: neural-pulse 4s infinite ease-in-out;
 }

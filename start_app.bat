@@ -1,56 +1,18 @@
 @echo off
-setlocal
-echo ==========================================
-echo      Atlas Application Startup Script
-echo ==========================================
-echo.
+echo Cleaning up previous sessions...
+:: Force kill any stuck node processes to clear ports (like 5050 and 8080)
+taskkill /F /IM node.exe >nul 2>&1
 
-:: Check if node is installed
-where node >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [CRITICAL ERROR] Node.js is not installed or not in your PATH.
-    echo Please install Node.js from https://nodejs.org/
-    pause
-    exit /b
-)
+echo Starting Aurem Backend Dev Server...
+start "Aurem Backend" cmd /k "cd server && npm run dev"
 
-:: Force install if node_modules missing
-if not exist "node_modules\" (
-    echo [STATUS] node_modules folder is missing. Installing dependencies now...
-    echo (This will take a minute. Please wait.)
-    call npm install --legacy-peer-deps
-    if %errorlevel% neq 0 (
-        echo.
-        echo [ERROR] npm install failed.
-        pause
-        exit /b
-    )
-) else (
-    echo [STATUS] Dependencies found (node_modules exists).
-)
+echo Starting Aurem Frontend Dev Server...
+start "Aurem Frontend" cmd /k "npm run dev"
 
 echo.
-echo [STATUS] Starting Application...
+echo ======================================================
+echo Both servers are starting up in separate windows!
+echo If a window closes instantly, check the terminal.
+echo ======================================================
 echo.
-echo If successful, browser will open at: http://localhost:8080
-echo.
-
-:: Start backend server in a new window
-echo [STATUS] Starting Backend Server on port 5050...
-start "Atlas Backend" cmd /c "cd server && npm install --legacy-peer-deps && node index.js"
-
-:: Wait for server to initialize
-timeout /t 3 /nobreak >nul
-
-:: Run the Vite dev server
-echo [STATUS] Starting Frontend on port 8080...
-call npm run dev
-
-if %errorlevel% neq 0 (
-    echo.
-    echo [ERROR] 'npm run dev' failed.
-    echo 1. Check if another program is using port 8080.
-    echo 2. Try deleting 'node_modules' and running this script again.
-)
-
 pause

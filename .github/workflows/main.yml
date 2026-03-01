@@ -1,0 +1,42 @@
+name: Aurem CI/CD Production Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Install Frontend Dependencies
+      run: npm ci
+
+    - name: Install Backend Dependencies
+      run: cd server && npm ci
+      
+    - name: Lint Codebase
+      run: npm run lint
+      
+    - name: Build React Frontend
+      run: npm run build
+      
+    # Example deployment step to Render or AWS would go below
+    # - name: Deploy to Production
+    #   if: github.ref == 'refs/heads/main'
+    #   run: |
+    #     curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}

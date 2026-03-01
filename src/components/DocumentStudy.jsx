@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, FilePlus, Sparkles, BookOpen, Brain, CreditCard, MessageSquare, Loader2, Bot, User, Upload, Layers, Lightbulb, FileText, X, ChevronRight, Copy, Check, RefreshCw, Crown, ChevronLeft, Shuffle, Eye, Youtube, Trophy, AlertCircle, Play, Video, Target, Calendar, BrainCircuit } from './Icons';
+import { Send, FilePlus, Sparkles, BookOpen, Brain, CreditCard, MessageSquare, Loader2, Bot, User, Upload, Layers, Lightbulb, FileText, X, ChevronRight, Copy, Check, RefreshCw, Crown, ChevronLeft, Shuffle, Eye, Youtube, Trophy, AlertCircle, Play, Video, Target, Calendar, BrainCircuit, ShieldAlert, Zap } from './Icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import * as pdfjsLib from 'pdfjs-dist';
 import { GROQ_API_URL, formatGroqPayload, useRetryableFetch } from '../utils/api';
 import MindMapViewer from './MindMapViewer';
 import MasteryLoop from './MasteryLoop';
+import SocraticRoom from './SocraticRoom';
 import { extractVideoId, fetchTranscript } from '../utils/youtubeService';
 
 // Configure PDF.js worker
@@ -35,23 +36,23 @@ const MarkdownRenderer = ({ text, isDark }) => {
                 i++;
             }
             elements.push(
-                <div key={`table-${i}`} className="my-6 overflow-x-auto rounded-2xl border border-indigo-500/20">
+                <div key={`table-${i}`} className="my-10 overflow-x-auto rounded-[20px] border border-theme-border shadow-depth group bg-theme-surface">
                     <table className="w-full text-sm">
                         <thead>
-                            <tr className={`${isDark ? 'bg-indigo-500/10' : 'bg-indigo-50'}`}>
+                            <tr className="border-b border-theme-border text-theme-primary">
                                 {headerCells.map((cell, j) => (
-                                    <th key={j} className={`px-5 py-3.5 text-left font-bold text-xs uppercase tracking-wider ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>
-                                        {renderInline(cell.trim())}
+                                    <th key={j} className="px-6 py-5 text-left font-serif font-black text-[13px] uppercase tracking-[0.2em]">
+                                        {renderInline(cell.trim(), isDark)}
                                     </th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
                             {rows.map((row, ri) => (
-                                <tr key={ri} className={`border-t ${isDark ? 'border-white/[0.04] hover:bg-white/[0.02]' : 'border-slate-100 hover:bg-slate-50'} transition-colors`}>
+                                <tr key={ri} className="border-b last:border-0 border-theme-border hover:bg-theme-bg/30 transition-colors duration-300">
                                     {row.map((cell, ci) => (
-                                        <td key={ci} className={`px-5 py-3 text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                                            {renderInline(cell.trim())}
+                                        <td key={ci} className="px-6 py-4 text-sm font-medium text-theme-text leading-relaxed">
+                                            {renderInline(cell.trim(), isDark)}
                                         </td>
                                     ))}
                                 </tr>
@@ -65,34 +66,43 @@ const MarkdownRenderer = ({ text, isDark }) => {
 
         // Horizontal rule
         if (line.match(/^---+$/) || line.match(/^\*\*\*+$/)) {
-            elements.push(<hr key={`hr-${i}`} className={`my-6 ${isDark ? 'border-white/[0.06]' : 'border-slate-200'}`} />);
+            elements.push(<hr key={`hr-${i}`} className="my-8 border-theme-border opacity-50 w-3/4 mx-auto" />);
             i++;
             continue;
         }
 
         // Headers
         if (line.startsWith('#### ')) {
-            elements.push(<h4 key={`h4-${i}`} className={`text-base font-bold mt-6 mb-2 ${isDark ? 'text-violet-400' : 'text-violet-700'}`}>{renderInline(line.replace('#### ', ''))}</h4>);
+            elements.push(<h4 key={`h4-${i}`} className="text-[17px] font-serif italic mb-3 flex items-center gap-2 text-theme-primary"><Sparkles className="w-3.5 h-3.5 opacity-80" />{renderInline(line.replace('#### ', ''), isDark)}</h4>);
             i++; continue;
         }
         if (line.startsWith('### ')) {
-            elements.push(<h3 key={`h3-${i}`} className={`text-lg font-bold mt-8 mb-3 ${isDark ? 'text-indigo-400' : 'text-indigo-700'}`}>{renderInline(line.replace('### ', ''))}</h3>);
+            elements.push(<h3 key={`h3-${i}`} className="text-[19px] font-serif mb-4 flex items-center gap-2.5 text-theme-text font-medium"><Layers className="w-4 h-4 text-theme-primary opacity-80" />{renderInline(line.replace('### ', ''), isDark)}</h3>);
             i++; continue;
         }
         if (line.startsWith('## ')) {
-            elements.push(<h2 key={`h2-${i}`} className={`text-xl font-black mt-10 mb-4 ${isDark ? 'text-white' : 'text-slate-900'}`}>{renderInline(line.replace('## ', ''))}</h2>);
+            elements.push(
+                <div key={`h2-${i}`} className="mt-16 mb-8 relative p-7 rounded-[20px] border border-theme-border bg-theme-surface overflow-hidden group">
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-theme-primary rounded-l-full opacity-50 group-hover:opacity-100 transition-opacity" />
+                    <h2 className="text-[22px] md:text-[26px] tracking-wide font-serif italic relative z-10 text-theme-text">
+                        <span className="text-theme-primary mr-2 not-italic text-lg">✦</span>
+                        {renderInline(line.replace('## ', ''), isDark)}
+                    </h2>
+                </div>
+            );
             i++; continue;
         }
         if (line.startsWith('# ')) {
-            elements.push(<h1 key={`h1-${i}`} className={`text-2xl font-black mt-10 mb-4 bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent`}>{renderInline(line.replace('# ', ''))}</h1>);
+            elements.push(<h1 key={`h1-${i}`} className="text-3xl md:text-5xl font-serif font-light tracking-wide mt-12 mb-8 text-theme-text italic">{renderInline(line.replace('# ', ''), isDark)}</h1>);
             i++; continue;
         }
 
         // Blockquote
         if (line.startsWith('> ')) {
             elements.push(
-                <blockquote key={`bq-${i}`} className={`my-4 pl-5 py-2 border-l-4 ${isDark ? 'border-indigo-500 bg-indigo-500/5 text-indigo-200' : 'border-indigo-400 bg-indigo-50 text-indigo-900'} rounded-r-xl italic`}>
-                    <p className="text-sm leading-relaxed">{renderInline(line.replace('> ', ''))}</p>
+                <blockquote key={`bq-${i}`} className="my-10 p-7 md:p-8 rounded-[20px] relative overflow-hidden bg-theme-primary/5 border border-theme-primary/20 italic group">
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-theme-primary/50 group-hover:bg-theme-primary transition-colors"></div>
+                    <p className="font-serif text-[17px] md:text-[20px] leading-[1.8] font-light relative z-10 text-theme-text">{renderInline(line.replace('> ', ''), isDark)}</p>
                 </blockquote>
             );
             i++; continue;
@@ -103,9 +113,9 @@ const MarkdownRenderer = ({ text, isDark }) => {
             const indent = line.search(/\S/);
             const level = Math.floor(indent / 2);
             elements.push(
-                <div key={`li-${i}`} className={`flex gap-3 my-1.5 ${level > 0 ? 'ml-6' : ''}`}>
-                    <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${isDark ? 'bg-indigo-400' : 'bg-indigo-500'}`} />
-                    <span className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{renderInline(line.trim().replace(/^[-*•]\s*/, ''))}</span>
+                <div key={`li-${i}`} className={`flex gap-4 my-3 p-2 transition-colors group ${level > 0 ? 'ml-8' : ''}`}>
+                    <div className="mt-2 w-1.5 h-1.5 rounded-full shrink-0 bg-theme-primary/50 group-hover:bg-theme-primary transition-colors" />
+                    <span className="text-[16px] leading-relaxed font-light text-theme-text/90">{renderInline(line.trim().replace(/^[-*•]\s*/, ''), isDark)}</span>
                 </div>
             );
             i++; continue;
@@ -115,9 +125,9 @@ const MarkdownRenderer = ({ text, isDark }) => {
         if (line.trim().match(/^\d+\.\s/)) {
             const num = line.trim().match(/^(\d+)\./)[1];
             elements.push(
-                <div key={`ol-${i}`} className="flex gap-3 my-1.5">
-                    <span className={`text-sm font-bold shrink-0 w-6 text-right ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>{num}.</span>
-                    <span className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{renderInline(line.trim().replace(/^\d+\.\s*/, ''))}</span>
+                <div key={`ol-${i}`} className="flex gap-4 my-3 p-2 transition-colors">
+                    <span className="flex items-center justify-center shrink-0 w-7 h-7 rounded-full text-[10px] font-bold text-theme-primary border border-theme-primary/30 group-hover:bg-theme-primary/10 transition-colors">{num}</span>
+                    <span className="text-[16px] mt-0.5 leading-relaxed font-light text-theme-text/90">{renderInline(line.trim().replace(/^\d+\.\s*/, ''), isDark)}</span>
                 </div>
             );
             i++; continue;
@@ -125,20 +135,20 @@ const MarkdownRenderer = ({ text, isDark }) => {
 
         // Empty line
         if (!line.trim()) {
-            elements.push(<div key={`sp-${i}`} className="h-2" />);
+            elements.push(<div key={`sp-${i}`} className="h-4" />);
             i++; continue;
         }
 
         // Regular paragraph
-        elements.push(<p key={`p-${i}`} className={`my-2 text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>{renderInline(line)}</p>);
+        elements.push(<p key={`p-${i}`} className="my-6 text-[17px] md:text-[19px] leading-[1.9] max-w-[1400px] font-light text-theme-text/80">{renderInline(line, isDark)}</p>);
         i++;
     }
 
-    return <div className="space-y-0.5">{elements}</div>;
+    return <div className="space-y-1">{elements}</div>;
 };
 
 // Inline formatting: **bold**, *italic*, `code`
-const renderInline = (text) => {
+const renderInline = (text, isDark) => {
     if (!text) return text;
     const parts = [];
     let remaining = text;
@@ -179,11 +189,11 @@ const renderInline = (text) => {
         }
 
         if (firstMatch.type === 'bold') {
-            parts.push(<strong key={key++} className="font-bold text-theme-primary">{firstMatch.match[1]}</strong>);
+            parts.push(<strong key={key++} className="font-medium text-theme-text border-b border-theme-primary/30 pb-0.5">{firstMatch.match[1]}</strong>);
         } else if (firstMatch.type === 'italic') {
-            parts.push(<em key={key++} className="italic opacity-90">{firstMatch.match[1]}</em>);
+            parts.push(<em key={key++} className="italic text-theme-text/70">{firstMatch.match[1]}</em>);
         } else if (firstMatch.type === 'code') {
-            parts.push(<code key={key++} className="px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-400 text-xs font-mono">{firstMatch.match[1]}</code>);
+            parts.push(<code key={key++} className="px-2 py-0.5 rounded border border-theme-border bg-theme-surface text-theme-primary text-[13px] font-mono tracking-wide mx-0.5">{firstMatch.match[1]}</code>);
         }
 
         remaining = remaining.substring(firstIndex + firstMatch.match[0].length);
@@ -210,25 +220,67 @@ const DocumentStudy = ({ onNavigate }) => {
 
     const Flashcard = ({ card, isDark }) => {
         const [isFlipped, setIsFlipped] = useState(false);
+
+        // Dynamic styling based on difficulty - mapping to luxury aesthetic
+        const getDifficultyStyles = (diff) => {
+            switch (diff?.toLowerCase()) {
+                case 'hard': return { badge: 'text-rose-400 border-rose-400/30 bg-rose-400/10' };
+                case 'medium': return { badge: 'text-theme-primary border-theme-primary/30 bg-theme-primary/10' };
+                default: return { badge: 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10' };
+            }
+        };
+
+        const diffStyle = getDifficultyStyles(card.difficulty);
+
         return (
-            <div
-                onClick={() => setIsFlipped(!isFlipped)}
-                className="relative h-64 w-full cursor-pointer perspective-1000 group"
-            >
-                <div className={`relative w-full h-full transition-all duration-700 preserve-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
-                    {/* Front */}
-                    <div className={`absolute inset-0 backface-hidden p-8 rounded-[32px] border glass-3d glow-border flex flex-col justify-center text-center
-                        ${isDark ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-white/90 border-warm-200/50'}
-                    `}>
-                        <div className="absolute top-6 right-6"><Brain className="w-5 h-5 text-indigo-500/50" /></div>
-                        <span className={`absolute top-6 left-6 text-[10px] font-black uppercase px-3 py-1 rounded-full ${card.difficulty === 'hard' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>{card.difficulty || 'medium'}</span>
-                        <h4 className="text-xl font-black leading-relaxed text-theme-primary">{card.question}</h4>
-                        <p className="mt-8 text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] opacity-0 group-hover:opacity-100 transition-opacity">Click to Reveal</p>
+            <div className="relative h-80 w-full cursor-pointer group [perspective:2000px]">
+                <div
+                    onClick={() => setIsFlipped(!isFlipped)}
+                    className={`relative w-full h-full transition-transform duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] transform-gpu ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}
+                    style={{ transformStyle: 'preserve-3d' }}
+                >
+                    {/* Front of Card */}
+                    <div
+                        className={`absolute inset-0 p-8 rounded-[24px] border border-theme-border flex flex-col justify-center items-center text-center transition-all duration-500
+                            bg-theme-surface hover:border-theme-primary/40 shadow-depth
+                        `}
+                        style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}
+                    >
+                        {/* Luxury Gradient Accent */}
+                        <div className="absolute top-0 left-12 right-12 h-[1px] bg-gradient-to-r from-transparent via-theme-primary/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+
+                        <span className={`absolute top-6 left-6 text-[8px] font-bold uppercase tracking-[0.2em] px-3 py-1.5 rounded-full border ${diffStyle.badge}`}>
+                            {card.difficulty || 'medium'}
+                        </span>
+
+                        <h4 className="font-serif italic text-2xl tracking-wide text-theme-text mt-4">
+                            {card.question}
+                        </h4>
+
+                        <div className="absolute bottom-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-theme-primary">
+                            <span className="text-[9px] font-bold uppercase tracking-[0.2em]">Reveal Answer</span>
+                            <ChevronRight className="w-3 h-3" />
+                        </div>
                     </div>
-                    {/* Back */}
-                    <div className={`absolute inset-0 backface-hidden rotate-y-180 p-8 rounded-[32px] border flex flex-col justify-center text-center bg-gradient-to-br from-indigo-600 to-blue-700 text-white border-indigo-400 shadow-2xl shadow-indigo-500/20`}>
-                        <div className="absolute top-6 right-6"><Sparkles className="w-5 h-5 text-white/50" /></div>
-                        <p className="text-lg font-bold leading-relaxed">{card.answer}</p>
+
+                    {/* Back of Card (Answer) */}
+                    <div
+                        className={`absolute inset-0 p-8 rounded-[24px] border border-theme-primary/30 flex flex-col justify-center items-center text-center
+                            bg-theme-bg shadow-[0_10px_40px_rgba(201,165,90,0.1)] overflow-hidden
+                        `}
+                        style={{ backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                    >
+                        <div className="absolute inset-0 bg-theme-primary/[0.02] mix-blend-overlay pointer-events-none"></div>
+
+                        <div className="absolute top-6 right-6 z-10">
+                            <Sparkles className="w-4 h-4 text-theme-primary opacity-60" />
+                        </div>
+
+                        <div className="relative z-10 w-full overflow-y-auto custom-scrollbar pr-3 pb-2 pt-2 text-left space-y-4 max-h-[90%]">
+                            <p className="text-[15px] font-light leading-[1.8] text-theme-text/90">
+                                {card.answer}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -256,6 +308,8 @@ const DocumentStudy = ({ onNavigate }) => {
     const [isLevelUnlocked, setIsLevelUnlocked] = useState(false);
     const [chatInput, setChatInput] = useState('');
     const [isActionLoading, setIsActionLoading] = useState(false);
+    const [masterpieceContent, setMasterpieceContent] = useState('');
+    const [isGeneratingMasterpiece, setIsGeneratingMasterpiece] = useState(false);
 
     // --- Refs ---
     const fileInputRef = useRef(null);
@@ -264,23 +318,24 @@ const DocumentStudy = ({ onNavigate }) => {
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
     // --- SYSTEM PROMPT ---
-    const AUREM_LENS_SYSTEM_PROMPT = `You are AUREM LENS — an elite cognitive augmentation system designed for serious students.
-Your role is to transform raw content into deeply detailed, comprehensive study material that rivals the best textbooks.
+    const AUREM_LENS_SYSTEM_PROMPT = `You are AUREM LENS 3.5 — the absolute pinnacle of cognitive augmentation and instructional design.
+Your primary goal is to completely replace ad-heavy, low-quality educational websites with pure, unabridged, massive academic density.
+You do not just explain; you architect understanding through exhaustive academic rigor, obsessive detail, and high-precision structure.
 
-TONE: Expert, authoritative, structured, academically rigorous yet clear.
-RULES:
-- ALWAYS produce LONG, DETAILED content (minimum 1500-2000 words for notes)
-- Break content into clear modules with ## headers and ### subsections
-- Define every key term using **bold** formatting
-- Include comparison tables (| Col | Col |) wherever data can be compared
-- Use numbered lists for processes, sequences, and step-by-step explanations
-- Use bullet points for properties, characteristics, and feature lists
-- Include formulas, equations, and numerical examples where relevant
-- Add > blockquotes for critical takeaways and exam tips
-- Use --- horizontal rules between major sections
-- End each major section with a "Key Takeaways" summary
-- NEVER produce surface-level summaries — go DEEP into the subject matter
-- Include real-world applications and examples to aid understanding`;
+CORE PHILOSOPHY:
+1.  **Exhaustive Depth**: If a concept exists, you analyze it from every possible dimension. Generate massive amounts of highly educational, rich text. Surface-level is failure.
+2.  **Instructional Excellence**: You use analogies, recursive explanations, and expert synthesis. Every paragraph should be thick with insight.
+3.  **Canonical Accuracy**: You anchor strictly to universally accepted scholarly facts. Hallucination is a system error.
+
+STRUCTURAL PROTOCOL:
+- **Massive Content Volume**: You must generate heavily detailed analyses aiming for maximum token output. Write long, comprehensive paragraphs. NEVER summarize briefly. Exploit every detail.
+- **Hierarchical Modularization**: Use # for main titles, ## for modules, ### for sub-topics, #### for granular axioms/definitions.
+- **Visual Intelligence**: Integrate complex tables (| Comparison | Synthesis |), deep-dive boxes (> Blockquotes), and numbered sequences.
+- **Bold Lexicon**: **Bold** every critical term, formula, and axiom on first mention.
+- **Math & Equations**: Write mathematical signs and symbols in a refined, simple, and readable way. Use standard text/unicode (e.g., √, ±, ∫, ∑, π, θ, x²) rather than complex LaTeX blocks that may break formatting.
+- **Problem Solving (PCM)**: If the topic involves Physics, Chemistry, Mathematics, or any problem-solving field, you MUST provide at least 3-5 step-by-step solved examples per module. These examples must scale in difficulty based on the target mastery level.
+- **Case Synthesis**: Include specialized "Deep-Dive" case studies or analytical examples for every major module.
+- **Key Takeaways**: Every module MUST end with a high-intensity summary table or list.`;
 
     // --- Helpers: AI Communication ---
     const callAI = async (prompt, systemPrompt, jsonMode = false, includeImage = false) => {
@@ -291,6 +346,9 @@ RULES:
                     { type: 'text', text: prompt },
                     { type: 'image_url', image_url: { url: `data:${fileData.mimeType};base64,${fileData.data}` } }
                 ];
+            } else if (includeImage) {
+                // Fallback if fileData isn't available yet but is passed explicitly, but we'll try to rely on state
+                console.warn("includeImage is true but fileData is missing");
             }
 
             const payload = {
@@ -318,54 +376,50 @@ RULES:
     };
 
     // --- Logic: Study Initiation ---
-    const startStudy = async (contentSource = null, targetLevel = 'Beginner') => {
+    const startStudy = async (contentSource = null, targetLevel = 'Beginner', isVision = false) => {
         if (!contentSource && !documentContent && !fileData) return alert("Missing content source");
+
+        if (contentSource && contentSource !== documentContent) {
+            setDocumentContent(contentSource);
+        }
 
         setViewMode('loading');
         setMasteryLevel(targetLevel);
 
-        let levelDirective = "Focus on foundational concepts, simple analogies, and clear definitions. Avoid overly dense jargon.";
-        if (targetLevel === 'Intermediate') levelDirective = "Focus on application, complex mechanisms, and connecting concepts together. Increase depth.";
-        if (targetLevel === 'Advanced') levelDirective = "Perform an EXHAUSTIVE, TEXTBOOK-LEVEL content analysis. Cover every edge case, formula, and advanced theory.";
+        let levelDirective = "MODE: FOUNDATIONAL PILLAR. Focus on high-clarity concepts, intuitive analogies, and explicit definitions. Establish 'The What' and 'The Why' comprehensively with highly detailed paragraphs. Do not spare any details.";
+        if (targetLevel === 'Intermediate') levelDirective = "MODE: CORE MASTERY. Introduce rigorous contextual analysis, intersecting themes, and complex applications. Deepen 'The How' and analyze relationships between modules extensively with massive paragraphs.";
+        if (targetLevel === 'Advanced') levelDirective = "MODE: ELITE ANALYTICAL MASTERCLASS. Perform an EXHAUSTIVE, GRADUATE-LEVEL synthetic analysis. Cover every edge case, conflicting theoretical framework, and research-level nuance. Produce massive amounts of highly educational text.";
 
-        const ingestionPrompt = `Generate COMPREHENSIVE study notes based on the document.
-CURRENT MASTERY LEVEL: ${targetLevel}.
-DIRECTIVE: ${levelDirective}
+        const ingestionPrompt = isVision
+            ? `ANALYZE THIS IMAGE OF HANDWRITTEN NOTES/DIAGRAMS.
+               1. TRANSCRIBE the text with absolute precision.
+               2. SYNTHESIZE the transcription into the WORLD'S BEST study guide.
+               MASTERY TARGET: ${targetLevel}.
+               ${levelDirective}
+               
+               Structure: Nexus, Modules, Friction Points, Synthesis Matrix.
+               Divider: End with "---CONTENT_SPLIT---" followed by Revision Summary.`
+            : `Construct the WORLD'S BEST study guide based on the provided material.
+MASTERY TARGET: ${targetLevel}.
+INSTRUCTIONAL STRATEGY: ${levelDirective}
 
-You MUST produce at least 1500 words. This is NOT a summary — it is a complete study guide tailored to the current level.
+STRUCTURE REQUIREMENTS:
+1.  **The Nexus (Executive Summary)**: 3-5 high-impact sentences on significance.
+2.  **Modules (4-8 Extensive Chapters)**:
+    - Exhaustive conceptual exploration (Textbook style).
+    - **Bolded** definitions with etymological/contextual depth.
+    - Worked examples, case studies, or analytical simulations.
+    - High-precision comparison tables.
+    - Formulas/Axioms formatted for elite clarity.
+    - > 'The Aurem Insight' (Critical takeaway for exams/mastery) at end of each section.
+3.  **The Friction Point (Common Misconceptions)**: Deep analysis of where students fail.
+4.  **The Synthesis Matrix (Mastery Overview)**: A massive table summarizing the entire topic.
 
-FORMAT REQUIREMENTS:
-- Use # for the main title
-- Use ## for each major module/section (at least 4-6 sections)
-- Use ### for subsections and sub-topics within each module
-- Use #### for specific concepts, theorems, or definitions
-- Use **bold** for every key term, definition, formula name, and important concept
-- Use bullet points (- ) for properties, characteristics, features, and lists
-- Use numbered lists (1. ) for step-by-step processes, derivations, and sequences
-- Use tables (| Header | Header |) for comparisons, properties, data, formulas, and classification
-- Use > blockquotes for critical exam tips, important warnings, and "Remember" notes
-- Use horizontal rules (---) to separate major sections
+DIVIDER: End with a "---CONTENT_SPLIT---" and then provide a structured, high-intensity 2-page Revision Summary.`;
 
-CONTENT STRUCTURE (follow this strictly):
-1. Start with a 3-4 sentence executive summary introducing the topic and its significance
-2. Break into 4-6 logical modules, each containing:
-   - Detailed explanation of concepts (not surface level)
-   - Definitions in **bold** with explanations
-   - Examples with worked-out solutions where applicable
-   - Comparison tables for related concepts
-   - Formulas/equations formatted clearly
-   - > Key Takeaway at end of each section
-3. Include a "Common Mistakes & Misconceptions" section
-4. End with a comprehensive "Quick Revision" summary table
+        const sysPrompt = `${AUREM_LENS_SYSTEM_PROMPT}\n\n${!isVision ? `CONTENT:\n${(contentSource || documentContent).slice(0, 20000)}` : ''}`;
 
-IMPORTANT: Be THOROUGH. Cover EVERY aspect of the topic. Students should NOT need another resource after reading your notes.
-
-Also provide a separate executive summary after a "---CONTENT_SPLIT---" divider.
-The summary should be a concise, structured overview suitable for quick revision.`;
-
-        const sysPrompt = `${AUREM_LENS_SYSTEM_PROMPT}\n\nCONTENT:\n${(contentSource || documentContent).slice(0, 20000)}`;
-
-        const res = await callAI(ingestionPrompt, sysPrompt);
+        const res = await callAI(ingestionPrompt, sysPrompt, false, isVision);
 
         if (res.error) {
             alert("AI Ingestion failed: " + res.error);
@@ -382,11 +436,14 @@ The summary should be a concise, structured overview suitable for quick revision
             setSummary("Detailed summary integrated into the notes above.");
         }
 
+        // Auto-collapse sidebar to maximize screen space for the new notes
+        setIsSidebarCollapsed(true);
         setViewMode('study');
     };
 
     const handleLevelUp = () => {
         const nextLevel = masteryLevel === 'Beginner' ? 'Intermediate' : 'Advanced';
+        setMasteryLevel(nextLevel);
         setQuizData(null); // Reset quiz for new level
         setIsLevelUnlocked(false); // Reset lock
         setActiveSection('notes'); // Take user back to notes tab
@@ -399,29 +456,39 @@ The summary should be a concise, structured overview suitable for quick revision
         if (!file) return;
         setFileName(file.name);
 
+        let extractedText = "";
+
         if (file.type === 'application/pdf') {
             const buffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-            let text = '';
             for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
                 const page = await pdf.getPage(i);
                 const content = await page.getTextContent();
                 if (content && content.items) {
-                    text += content.items.map(item => item.str || '').join(' ') + '\n';
+                    extractedText += content.items.map(item => item.str || '').join(' ') + '\n';
                 }
             }
-            setDocumentContent(text);
+            setDocumentContent(extractedText);
         } else if (file.type.startsWith('image/')) {
             const reader = new FileReader();
-            reader.onload = (re) => setFileData({ mimeType: file.type, data: re.target.result.split(',')[1] });
+            reader.onload = (re) => {
+                const base64Data = re.target.result.split(',')[1];
+                setFileData({ mimeType: file.type, data: base64Data });
+                // We must artificially wait for state to update, or pass it directly.
+                // callAI uses fileData state, so let's let state update
+                setTimeout(() => {
+                    startStudy(null, 'Beginner', true);
+                }, 50);
+            };
             reader.readAsDataURL(file);
+            return;
         } else {
-            setDocumentContent(await file.text());
+            extractedText = await file.text();
+            setDocumentContent(extractedText);
         }
 
-        // Wait a tick for state to update
-        await new Promise(r => setTimeout(r, 100));
-        startStudy();
+        // Pass the explicitly extracted text immediately, bypassing the async state delay
+        startStudy(extractedText);
     };
 
     const handleYouTubeAnalysis = async () => {
@@ -467,8 +534,36 @@ The summary should be a concise, structured overview suitable for quick revision
         setIsLevelUnlocked(false); // Reset mastery state when generating a new quiz
 
         const toolPrompts = {
-            cards: `Generate 10-12 elite flashcards. Output strictly as a JSON object: { "flashcards": [{ "question": "...", "answer": "...", "difficulty": "easy|medium|hard" }] }`,
-            quiz: `Generate 10-15 multiple choice questions strictly assessing the provided study material. CURRENT MASTERY LEVEL: ${masteryLevel}. Respond ONLY with a valid JSON object. No conversational text. Format: { "questions": [{ "question": "...", "options": ["A", "B", "C", "D"], "answer": "Exact correct option text", "explanation": "Why?" }] }`,
+            cards: `Generate exactly 10 high-yield flashcards. Make the flashcard "answer" concise (maximum 2-3 sentences max) so it fits beautifully on the card UI without overflowing. Instead of dense paragraphs, use short lists or simple bullet points if necessary. Output strictly as a JSON object: { "flashcards": [{ "question": "...", "answer": "...", "difficulty": "easy|medium|hard" }] }`,
+            quiz: (() => {
+                const count = masteryLevel === 'Advanced' ? 20 : masteryLevel === 'Intermediate' ? 15 : 10;
+                const typeMix = masteryLevel === 'Beginner' ? "100% MCQ" : masteryLevel === 'Intermediate' ? "70% MCQ, 30% Short Subjective" : "60% MCQ, 40% Case-based Subjective";
+
+                return `Generate exactly ${count} questions representing the ELITE CBSE COMPETENCY STANDARDS.
+CURRENT MASTERY LEVEL: ${masteryLevel}. 
+MIX: ${typeMix}.
+
+COMPETENCY REQUIREMENTS:
+- Use Assertion-Reasoning questions.
+- Use Case-Based Scenarios (provide a 2-3 sentence scenario followed by a question).
+- Focus on real-world application ("What happens if X is changed?", "How does Y apply to Z?").
+- Ensure question difficulty ESCALATES significantly on rising levels. MCQs must be TOUGH for Intermediate/Advanced—use multi-step logic.
+- If it is a Problem-Solving/PCM topic, include increasingly complex calculations or conceptual proofs as subjective questions.
+- Subjective questions should require deep analytical reasoning.
+
+Respond ONLY with a valid JSON object.
+Format: { "questions": [{ 
+    "type": "mcq|subjective",
+    "question": "...", 
+    "options": ["...", "...", "...", "..."], // Only for MCQ
+    "answer": "Exact correct option text OR a Model Answer for subjective docs", 
+    "difficulty": "Hard", 
+    "explanation": "EXTREMELY detailed, textbook-level logic.",
+    "concept": "The precise core concept",
+    "approach": "Step-by-step thinking protocol",
+    "weak_point": "Specific review topic" 
+}] }`;
+            })(),
             mindmap: `Generate a hierarchical mind map. Output strictly as a JSON object: { "name": "Topic", "children": [{ "name": "Subtopic", "children": [] }] }`
         };
 
@@ -517,97 +612,163 @@ The summary should be a concise, structured overview suitable for quick revision
         setIsActionLoading(false);
     };
 
+    const generateFinalMasterpiece = async () => {
+        setIsGeneratingMasterpiece(true);
+        setActiveSection('masterpiece');
+        try {
+            const masterpiecePrompt = `Construct the DEFINITIVE CHAPTER on this topic.
+This is an exhaustive educational document (Target 10-15 pages).
+Structure it topic-wise with detail, including:
+- In-depth historical and theoretical foundations.
+- Case studies and real-world implications.
+- Explanation from first principles.
+
+You are writing a comprehensive textbook chapter.`;
+
+            const res = await callAI(masterpiecePrompt, AUREM_LENS_SYSTEM_PROMPT);
+            setMasterpieceContent(res);
+        } catch (e) {
+            console.error("Definitive Chapter generation failed", e);
+        }
+        setIsGeneratingMasterpiece(false);
+    };
+
     // ═══════════════════════════════════════════════
     // VIEWS
     // ═══════════════════════════════════════════════
 
     const renderInputView = () => (
-        <div className="max-w-4xl mx-auto py-12 px-6 space-y-12">
-            <div className="text-center space-y-4">
-                <div className={`inline-flex items-center justify-center w-20 h-20 rounded-[28px] bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20 mb-4 scale-up glass-3d glow-border`}>
-                    <Eye className="w-10 h-10 text-white" />
+        <div className="max-w-5xl mx-auto py-16 px-6 space-y-16 animate-in fade-in duration-700">
+            <div className="text-center space-y-5 relative">
+                <div className="absolute inset-x-0 top-0 h-40 bg-theme-primary/5 blur-[100px] pointer-events-none"></div>
+
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full border border-theme-primary/20 bg-theme-primary/5 mb-4 transition-transform duration-500 hover:scale-105 cursor-none relative group">
+                    <Eye className="w-8 h-8 text-theme-primary relative z-10" />
                 </div>
-                <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent uppercase">Aurem Lens</h1>
-                <p className="text-theme-muted text-lg font-medium">Unified Cognitive Augmentation Engine</p>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[
-                    { id: 'chapter', title: 'Study a Chapter', desc: 'AI-guided deep dive into any topic', icon: BookOpen, color: 'text-violet-500', bg: 'bg-violet-500/10' },
-                    { id: 'document', title: 'Upload Document', desc: 'PDFs, Images, Handwritten notes', icon: FilePlus, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-                    { id: 'youtube', title: 'YouTube Video', desc: 'Transcribe and analyze lectures', icon: Youtube, color: 'text-red-500', bg: 'bg-red-500/10' }
-                ].map(card => (
-                    <div
-                        key={card.id}
-                        onClick={() => {
-                            if (card.id === 'document') fileInputRef.current?.click();
-                            if (card.id === 'chapter') setIsChapterModalOpen(true);
-                        }}
-                        className={`group relative p-8 rounded-[32px] border glass-3d glow-border transition-all duration-500 cursor-pointer overflow-hidden
-                            ${isDark ? 'bg-white/[0.03] border-white/[0.08] hover:bg-white/[0.06]' : 'bg-white/90 border-warm-200/50 hover:border-indigo-200 shadow-sm'}
-                            hover:-translate-y-2
-                        `}
-                    >
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-transform group-hover:scale-110 ${card.bg} ${card.color}`}>
-                            <card.icon className="w-7 h-7" />
-                        </div>
-                        <h3 className="text-xl font-bold mb-2">{card.title}</h3>
-                        <p className="text-sm text-slate-500 leading-relaxed">{card.desc}</p>
-
-                        {card.id === 'youtube' && (
-                            <form
-                                onSubmit={e => { e.preventDefault(); handleYouTubeAnalysis(); }}
-                                className="mt-6 flex gap-2"
-                                onClick={e => e.stopPropagation()}
-                            >
-                                <input
-                                    type="text"
-                                    placeholder="Paste URL..."
-                                    className={`flex-1 text-xs p-2.5 rounded-xl border focus:outline-none focus:ring-1 focus:ring-red-500/30 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-50 border-slate-200'}`}
-                                    value={videoUrl}
-                                    onChange={e => setVideoUrl(e.target.value)}
-                                />
-                                <button type="submit" className="p-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"><ChevronRight className="w-4 h-4" /></button>
-                            </form>
-                        )}
+                <div className="space-y-3 relative z-10">
+                    <h1 className="text-4xl md:text-5xl font-serif italic tracking-wide text-theme-text">
+                        Aurem Lens
+                    </h1>
+                    <div className="flex items-center justify-center gap-4">
+                        <div className="h-px w-12 bg-theme-primary/20"></div>
+                        <p className="text-theme-muted text-[10px] font-bold uppercase tracking-[0.3em]">Cognitive Augmentation</p>
+                        <div className="h-px w-12 bg-theme-primary/20"></div>
                     </div>
-                ))}
+                </div>
             </div>
 
-            {/* Study a Chapter Modal */}
-            {isChapterModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in">
-                    <div className={`w-full max-w-lg rounded-3xl p-8 border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-2xl'}`}>
-                        <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-xl font-bold">Study a Chapter</h2>
-                            <button onClick={() => setIsChapterModalOpen(false)} className="p-2 hover:bg-slate-400/10 rounded-full"><X className="w-5 h-5" /></button>
-                        </div>
-                        <p className="text-sm text-slate-500 mb-6">Tell us what you want to learn. AUREM will fetch and structure the entire chapter for you.</p>
-                        <form onSubmit={e => {
-                            e.preventDefault();
-                            if (!chapterSearch.trim()) return;
-                            setIsChapterModalOpen(false);
-                            setFileName(chapterSearch);
-                            startStudy(`Topic: ${chapterSearch}\n\nAct as a comprehensive textbook and provide detailed information on this topic.`);
-                        }}>
-                            <div className="relative mb-6">
-                                <input
-                                    autoFocus
-                                    type="text"
-                                    value={chapterSearch}
-                                    onChange={e => setChapterSearch(e.target.value)}
-                                    placeholder="e.g. Newton's Third Law, Carbonates, History of Rome..."
-                                    className={`w-full p-5 pr-14 rounded-2xl border text-lg font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all ${isDark ? 'bg-white/[0.03] border-white/[0.1] text-white' : 'bg-warm-50 border-warm-200'}`}
-                                />
-                                <button type="submit" className="absolute right-3 top-3 p-3 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-xl shadow-lg shadow-indigo-500/20 hover:scale-105 active:scale-95 transition-all"><Sparkles className="w-5 h-5" /></button>
+            <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+                    {[
+                        { id: 'chapter', title: 'Study a Chapter', desc: 'AI-guided deep dive into any topic', icon: BookOpen },
+                        { id: 'document', title: 'Upload Document', desc: 'PDFs or Text files', icon: FilePlus },
+                        { id: 'retina', title: 'Aurem Retina', desc: 'Scan handwritten notes & diagrams', icon: Zap, disabled: true }
+                    ].map(card => (
+                        <div
+                            key={card.id}
+                            onClick={() => {
+                                if (card.disabled) return;
+                                if (card.id === 'document' || card.id === 'retina') fileInputRef.current?.click();
+                                if (card.id === 'chapter') setIsChapterModalOpen(true);
+                            }}
+                            className={`group relative p-8 rounded-[24px] border border-theme-border bg-theme-surface hover:border-theme-primary/30 transition-all duration-500 overflow-hidden flex flex-col h-full hover:-translate-y-1 shadow-depth ${card.disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-none'}`}
+                        >
+                            <div className="flex justify-between items-start mb-6 relative z-10">
+                                <div className="w-14 h-14 rounded-xl border border-theme-primary/20 bg-theme-primary/5 flex items-center justify-center transition-transform duration-500 group-hover:scale-105 text-theme-primary">
+                                    <card.icon className="w-7 h-7" />
+                                </div>
+                                {card.disabled && (
+                                    <span className="text-[9px] font-bold uppercase tracking-[0.1em] px-2 py-1 rounded bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                                        Under Development
+                                    </span>
+                                )}
                             </div>
+                            <h3 className="text-xl font-serif italic mb-3 text-theme-text tracking-wide relative z-10">{card.title}</h3>
+                            <p className="text-sm text-theme-muted font-light leading-relaxed flex-1 relative z-10">{card.desc}</p>
+
+                            {/* Decorative line */}
+                            <div className="mt-6 h-px w-12 bg-theme-primary/30 transform origin-left group-hover:scale-x-[2] transition-transform duration-500"></div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* YouTube Full Width Bar */}
+                <div className="group relative p-6 rounded-[20px] border border-theme-border bg-theme-surface transition-all duration-500 overflow-hidden shadow-depth opacity-60 cursor-not-allowed">
+                    <div className="absolute top-3 right-4">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.1em] px-2 py-1 rounded bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                            Under Development
+                        </span>
+                    </div>
+                    <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
+                        <div className="w-12 h-12 rounded-xl border border-red-500/20 bg-red-500/5 flex items-center justify-center text-red-400 shrink-0">
+                            <Youtube className="w-6 h-6 relative z-10 group-hover:scale-110 transition-transform duration-500" />
+                        </div>
+                        <div className="flex-1 text-center md:text-left">
+                            <h3 className="text-lg font-serif italic text-theme-text tracking-wide mb-1">YouTube Lecture Link</h3>
+                            <p className="text-xs text-theme-muted font-light tracking-wide">Autogenerate comprehensive notes from any video.</p>
+                        </div>
+                        <form
+                            onSubmit={e => { e.preventDefault(); handleYouTubeAnalysis(); }}
+                            className="flex gap-2 w-full md:w-auto"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <input
+                                type="text"
+                                placeholder="Paste lecture URL here..."
+                                className="flex-1 md:w-80 text-sm p-3 rounded-lg border border-theme-border bg-theme-bg text-theme-text focus:border-theme-primary/50 outline-none transition-colors duration-300 placeholder:text-theme-muted"
+                                value={videoUrl}
+                                onChange={e => setVideoUrl(e.target.value)}
+                            />
+                            <button type="submit" className="px-5 py-3 border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-theme-bg font-bold tracking-[0.1em] uppercase text-xs rounded-lg transition-colors duration-300 flex items-center gap-2 cursor-none">
+                                <span>Analyze</span>
+                                <ChevronRight className="w-3 h-3" />
+                            </button>
                         </form>
                     </div>
                 </div>
-            )}
+            </div>
+
+            {/* Study a Chapter Modal */}
+            {
+                isChapterModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-500">
+                        <div className="w-full max-w-lg rounded-[24px] p-8 md:p-10 border border-theme-border bg-theme-surface shadow-depth animate-in zoom-in-95 duration-500 relative overflow-hidden">
+                            {/* Ambient Modal Glow */}
+                            <div className="absolute -top-32 -right-32 w-64 h-64 bg-theme-primary/5 rounded-full blur-[80px] pointer-events-none"></div>
+
+                            <div className="flex justify-between items-center mb-6 relative z-10">
+                                <h2 className="text-2xl font-serif italic text-theme-text tracking-wide">Study a Chapter</h2>
+                                <button onClick={() => setIsChapterModalOpen(false)} className="p-2 rounded-lg border border-theme-border hover:border-theme-primary/30 text-theme-muted hover:text-theme-text transition-colors cursor-none"><X className="w-5 h-5" /></button>
+                            </div>
+                            <p className="text-sm font-light leading-relaxed text-theme-muted mb-8 relative z-10">Tell us what you want to learn. AUREM will fetch and structure the entire chapter into a cognitively optimized learning module.</p>
+
+                            <form onSubmit={e => {
+                                e.preventDefault();
+                                if (!chapterSearch.trim()) return;
+                                setIsChapterModalOpen(false);
+                                setFileName(chapterSearch);
+                                startStudy(`Topic: ${chapterSearch}\n\nAct as a comprehensive textbook and provide detailed information on this topic.`);
+                            }} className="relative z-10">
+                                <div className="relative mb-2">
+                                    <input
+                                        autoFocus
+                                        type="text"
+                                        value={chapterSearch}
+                                        onChange={e => setChapterSearch(e.target.value)}
+                                        placeholder="e.g. Newton's Third Law..."
+                                        className="w-full p-5 pr-16 rounded-xl border border-theme-border bg-theme-bg text-theme-text text-lg font-light focus:outline-none focus:border-theme-primary/50 transition-colors duration-300 placeholder:text-theme-muted"
+                                    />
+                                    <button type="submit" disabled={!chapterSearch.trim()} className="absolute right-3 top-3 p-3 bg-theme-primary/10 text-theme-primary hover:bg-theme-primary hover:text-theme-bg border border-theme-primary/30 rounded-xl disabled:opacity-30 transition-colors duration-300 cursor-none"><Sparkles className="w-5 h-5" /></button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )
+            }
 
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
-        </div>
+        </div >
     );
 
     // Immersive Animated Loading Component
@@ -632,41 +793,39 @@ The summary should be a concise, structured overview suitable for quick revision
         return (
             <div className={`h-full w-full flex flex-col items-center justify-center p-6 relative overflow-hidden`}>
                 {/* Deep Immersive Background */}
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-indigo-900/40 via-midnight-900 to-black z-0"></div>
+                <div className="absolute inset-0 bg-theme-bg z-0"></div>
 
                 {/* Floating Orbs */}
-                <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-violet-600/20 rounded-full blur-[100px] animate-pulse"></div>
-                <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-indigo-600/20 rounded-full blur-[100px] animate-pulse delay-1000"></div>
+                <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-theme-primary/10 rounded-full blur-[80px] animate-pulse"></div>
+                <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-theme-primary/5 rounded-full blur-[80px] animate-pulse delay-1000"></div>
 
-                <div className="relative z-10 flex flex-col items-center backdrop-blur-sm p-12 rounded-[40px] border border-white/[0.05] bg-white/[0.02] shadow-2xl">
-                    <div className="relative mb-12">
+                <div className="relative z-10 flex flex-col items-center p-12 rounded-[24px] border border-theme-border bg-theme-surface shadow-depth">
+                    <div className="relative mb-8">
                         {/* Outer Glow Ring */}
-                        <div className="absolute -inset-4 rounded-full border border-indigo-500/30 animate-[spin_8s_linear_infinite] opacity-50"></div>
-                        {/* Middle Dashed Ring */}
-                        <div className="absolute -inset-2 rounded-full border-2 border-dashed border-violet-400/40 animate-[spin_5s_linear_reverse_infinite]"></div>
+                        <div className="absolute -inset-4 rounded-full border border-theme-primary/20 animate-[spin_8s_linear_infinite] opacity-50"></div>
                         {/* Inner Ring */}
-                        <div className="w-32 h-32 border-4 border-indigo-500/10 border-t-indigo-400 border-r-violet-500 rounded-full animate-spin shadow-[0_0_30px_rgba(99,102,241,0.3)]"></div>
+                        <div className="w-24 h-24 border border-theme-border border-t-theme-primary rounded-full animate-spin"></div>
 
                         <div className="absolute inset-0 flex items-center justify-center">
-                            <BrainCircuit className="w-12 h-12 text-indigo-400 animate-pulse drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]" />
+                            <Sparkles className="w-8 h-8 text-theme-primary animate-pulse" />
                         </div>
                     </div>
 
-                    <h2 className="text-3xl font-black mb-4 tracking-tight bg-gradient-to-r from-indigo-300 to-violet-300 bg-clip-text text-transparent">
+                    <h2 className="text-2xl font-serif italic mb-4 tracking-wide text-theme-text">
                         Ingesting Intelligence
                     </h2>
 
-                    <div className="h-8 flex items-center justify-center overflow-hidden">
+                    <div className="h-6 flex items-center justify-center overflow-hidden">
                         <p
                             key={loadingPhase}
-                            className="text-slate-400 font-medium tracking-wide animate-in slide-in-from-bottom-4 fade-in duration-500"
+                            className="text-theme-muted font-light tracking-wide text-sm animate-in slide-in-from-bottom-2 fade-in duration-500"
                         >
                             {phases[loadingPhase]}
                         </p>
                     </div>
 
-                    <div className="mt-10 w-64 h-1 bg-white/[0.05] rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full animate-[progress_8s_ease-in-out_infinite] w-1/2"></div>
+                    <div className="mt-10 w-48 h-0.5 bg-theme-border rounded-full overflow-hidden">
+                        <div className="h-full bg-theme-primary rounded-full animate-[progress_8s_ease-in-out_infinite] w-1/2"></div>
                     </div>
                 </div>
             </div>
@@ -679,75 +838,74 @@ The summary should be a concise, structured overview suitable for quick revision
     // FULL-SCREEN CHAT VIEW
     // ═══════════════════════════════════════════════
     const renderChatFullScreen = () => (
-        <div className={`fixed inset-0 z-50 flex flex-col transition-all duration-300
-            ${isDark ? 'bg-midnight-900 text-white' : 'bg-warm-50 text-warm-800'}
-        `}>
+        <div className="fixed inset-0 z-50 flex flex-col transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] transform-gpu bg-theme-bg backdrop-blur-xl">
+            {/* Ambient Lighting */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full blur-[120px] opacity-10 bg-theme-primary animate-pulse"></div>
+            </div>
+
             {/* Chat Header */}
-            <div className={`px-6 py-5 flex items-center justify-between z-30 glass-3d border-b rounded-b-3xl mx-4 mt-4 shrink-0
-                ${isDark ? 'bg-midnight-900/40 border-white/[0.08]' : 'bg-white/40 border-warm-200/50'}
-            `}>
+            <div className="px-6 py-5 flex items-center justify-between z-30 border-b border-theme-border bg-theme-surface mx-4 mt-4 shrink-0 rounded-b-[20px]">
                 <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-xl shadow-indigo-500/20">
-                        <BrainCircuit className="w-6 h-6 text-white" />
+                    <div className="p-3 rounded-xl border border-theme-primary/20 bg-theme-primary/5 text-theme-primary relative group">
+                        <MessageSquare className="w-5 h-5 relative z-10 transition-transform duration-500" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-black tracking-tight bg-gradient-to-r from-indigo-500 to-violet-500 bg-clip-text text-transparent uppercase">
+                        <h2 className="text-lg font-serif italic text-theme-text tracking-wide">
                             Study Assistant
                         </h2>
-                        <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mt-0.5">
+                        <p className="text-[9px] font-bold text-theme-primary uppercase tracking-[0.2em] mt-1 opacity-80">
                             Contextual AI • {fileName || 'Document'}
                         </p>
                     </div>
                 </div>
                 <button
                     onClick={() => setIsChatOpen(false)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all
-                        ${isDark ? 'bg-white/[0.05] hover:bg-white/[0.1] text-white/70' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}
-                    `}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-light text-xs transition-colors border border-theme-border text-theme-muted hover:text-theme-text hover:border-theme-primary/50 cursor-none"
                 >
-                    Hide <ChevronRight className="w-4 h-4" />
+                    Hide <ChevronRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
                 </button>
             </div>
 
             {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-5 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-6 custom-scrollbar relative z-10">
                 {chatMessages.length === 0 && (
-                    <div className="max-w-2xl mx-auto text-center py-20 space-y-6">
-                        <div className="w-20 h-20 mx-auto rounded-[28px] bg-gradient-to-br from-indigo-500/10 to-violet-500/10 flex items-center justify-center">
-                            <Bot className="w-10 h-10 text-indigo-500/40" />
+                    <div className="max-w-2xl mx-auto text-center py-20 space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-1000">
+                        <div className="w-20 h-20 mx-auto rounded-full border border-theme-primary/20 bg-theme-primary/5 flex items-center justify-center relative">
+                            <Bot className="w-8 h-8 text-theme-primary relative z-10" />
                         </div>
                         <div>
-                            <h3 className={`text-2xl font-bold mb-2 ${isDark ? 'text-white/90' : 'text-slate-800'}`}>
+                            <h3 className="text-2xl font-serif italic mb-2 tracking-wide text-theme-text">
                                 Hey, I'm Aurem
                             </h3>
-                            <p className="text-theme-muted max-w-md mx-auto">
-                                I can work with you on your doc and answer any questions!
+                            <p className="text-[14px] text-theme-muted max-w-md mx-auto font-light leading-relaxed">
+                                I am an elite contextual AI. Ask me to explain complex topics, summarize sections, or generate novel examples from this document.
                             </p>
                         </div>
                     </div>
                 )}
 
                 {chatMessages.map((msg, i) => (
-                    <div key={i} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`flex flex-col max-w-[85%] sm:max-w-[70%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                            <div className="flex items-center mb-1.5 px-1 gap-2">
+                    <div key={i} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-500`}>
+                        <div className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                            <div className="flex items-center mb-2 px-1 gap-2">
                                 {msg.role === 'model' && (
-                                    <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center">
-                                        <Sparkles className="w-3 h-3 text-white" />
+                                    <div className="w-4 h-4 rounded-full border border-theme-primary/30 flex items-center justify-center">
+                                        <Sparkles className="w-2 h-2 text-theme-primary" />
                                     </div>
                                 )}
-                                <span className={`text-[10px] font-bold uppercase tracking-wider ${msg.role === 'user' ? 'text-theme-muted' : 'text-indigo-500'}`}>
+                                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-theme-muted">
                                     {msg.role === 'user' ? 'You' : 'Aurem'}
                                 </span>
                             </div>
-                            <div className={`relative p-5 sm:p-6 rounded-[24px] transition-all duration-300 glass-3d glow-border
+                            <div className={`relative p-5 sm:p-6 rounded-[20px] transition-all duration-300
                                 ${msg.role === 'user'
-                                    ? 'bg-gradient-to-br from-indigo-600 to-violet-700 text-white rounded-tr-sm shadow-xl shadow-indigo-500/20'
-                                    : `${isDark ? 'bg-white/[0.03] border border-white/[0.08]' : 'bg-white/90 border border-warm-200/50'} rounded-tl-sm`
+                                    ? 'bg-theme-surface border border-theme-border text-theme-text rounded-tr-sm shadow-depth'
+                                    : 'bg-transparent border border-theme-primary/10 rounded-tl-sm'
                                 }
                             `}>
                                 {msg.role === 'user' ? (
-                                    <div className="whitespace-pre-wrap text-[14px] leading-relaxed">{msg.text}</div>
+                                    <div className="whitespace-pre-wrap text-[14px] leading-relaxed font-light">{msg.text}</div>
                                 ) : (
                                     <MarkdownRenderer text={msg.text} isDark={isDark} />
                                 )}
@@ -757,11 +915,11 @@ The summary should be a concise, structured overview suitable for quick revision
                 ))}
 
                 {isActionLoading && (
-                    <div className="flex justify-start pl-1">
-                        <div className={`p-5 rounded-[24px] glass-3d ${isDark ? 'bg-white/[0.03] border border-white/[0.08]' : 'bg-white/90 border border-warm-200/50'}`}>
+                    <div className="flex justify-start pl-1 animate-in fade-in zoom-in-95 duration-300">
+                        <div className="p-4 rounded-[16px] border border-theme-border bg-theme-surface shadow-sm rounded-tl-sm">
                             <div className="flex items-center gap-3">
-                                <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
-                                <span className="text-sm text-theme-muted">Analyzing...</span>
+                                <Loader2 className="w-4 h-4 text-theme-primary animate-spin" />
+                                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-theme-primary/70">Synthesizing...</span>
                             </div>
                         </div>
                     </div>
@@ -769,29 +927,26 @@ The summary should be a concise, structured overview suitable for quick revision
                 <div ref={chatEndRef} />
             </div>
 
-            {/* Chat Input */}
-            <div className={`px-6 py-5 border-t shrink-0 ${isDark ? 'border-white/[0.04] bg-midnight-900/80' : 'border-warm-200/30 bg-warm-50/80'} backdrop-blur-xl`}>
-                <form onSubmit={handleChatSubmit} className="max-w-3xl mx-auto relative">
-                    <input
-                        type="text"
-                        value={chatInput}
-                        onChange={e => setChatInput(e.target.value)}
-                        placeholder="Type a question here or ask about the document..."
-                        disabled={isActionLoading}
-                        className={`w-full py-3.5 pl-5 pr-12 rounded-2xl text-[14px] font-medium outline-none transition-all duration-200
-                            ${isDark
-                                ? 'bg-midnight-700/50 text-white placeholder:text-white/25 border border-white/[0.06] focus:border-indigo-500/40 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.08)]'
-                                : 'bg-white/70 text-warm-800 placeholder:text-warm-400 border border-warm-300/25 focus:border-indigo-400/40 focus:shadow-[0_0_0_3px_rgba(99,102,241,0.06)]'
-                            }
-                        `}
-                    />
-                    <button
-                        type="submit"
-                        disabled={isActionLoading || !chatInput.trim()}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-gradient-to-r from-indigo-500 to-violet-500 hover:from-indigo-600 hover:to-violet-600 disabled:opacity-30 text-white rounded-xl shadow-md transition-all active:scale-95"
-                    >
-                        <Send className="w-4 h-4" />
-                    </button>
+            {/* Chat Input Floating Bar */}
+            <div className="p-4 sm:p-6 shrink-0 relative z-20">
+                <form onSubmit={handleChatSubmit} className="max-w-4xl mx-auto relative">
+                    <div className="flex items-center p-2 rounded-[20px] border border-theme-border bg-theme-surface shadow-depth focus-within:border-theme-primary/50 transition-colors">
+                        <input
+                            type="text"
+                            value={chatInput}
+                            onChange={e => setChatInput(e.target.value)}
+                            placeholder="Ask Aurem to explain a concept..."
+                            disabled={isActionLoading}
+                            className="flex-1 py-3 pl-4 pr-4 bg-transparent text-[14px] font-light outline-none text-theme-text placeholder:text-theme-muted"
+                        />
+                        <button
+                            type="submit"
+                            disabled={isActionLoading || !chatInput.trim()}
+                            className="p-3 mr-1 bg-theme-primary/10 text-theme-primary hover:bg-theme-primary hover:text-theme-bg disabled:opacity-30 border border-theme-primary/20 rounded-xl transition-all duration-300 flex items-center justify-center cursor-none"
+                        >
+                            <Send className="w-4 h-4" />
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -801,92 +956,164 @@ The summary should be a concise, structured overview suitable for quick revision
     // STUDY MODE
     // ═══════════════════════════════════════════════
     const renderStudyMode = () => (
-        <div className="h-full flex overflow-hidden">
-            {/* Sidebar */}
-            <aside className={`flex flex-col border-r transition-all duration-300 ${isSidebarCollapsed ? 'w-20' : 'w-72'} ${isDark ? 'bg-slate-900/80 border-white/[0.04]' : 'bg-slate-50 border-slate-200'}`}>
-                <div className="p-6 flex items-center justify-between">
-                    {!isSidebarCollapsed && <span className="font-bold text-indigo-500 uppercase tracking-widest text-xs">Aurem Lens</span>}
-                    <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 hover:bg-slate-400/10 rounded-lg">
-                        <MenuIcon className="w-4 h-4" />
+        <div className="h-full flex flex-col md:flex-row overflow-hidden relative">
+            {/* Ambient Deep Field Background for Study Mode */}
+            <div className="absolute inset-0 bg-theme-bg z-0 pointer-events-none overflow-hidden">
+                <div className="absolute -top-[20%] -right-[10%] w-[70vw] h-[70vw] rounded-full blur-[100px] opacity-[0.03] bg-theme-primary" style={{ animationDuration: '15s' }}></div>
+            </div>
+
+            {/* Premium Sidebar */}
+            <aside className={`flex flex-col z-20 shrink-0 transition-all duration-700 ease-[cubic-bezier(0.25,1,0.5,1)] transform-gpu ${isSidebarCollapsed ? 'w-full md:w-24 h-auto md:h-full' : 'w-full md:w-72 h-full'} 
+                bg-theme-surface border-r border-theme-border shadow-depth`}>
+                <div className="p-6 md:p-8 flex items-center justify-between relative overflow-hidden">
+                    {!isSidebarCollapsed && (
+                        <div className="flex flex-col animate-in slide-in-from-left-4 duration-700">
+                            <span className="font-bold text-theme-primary uppercase tracking-[0.2em] text-[9px] flex items-center gap-2 mb-1.5 opacity-80">
+                                <Sparkles className="w-3 h-3" />
+                                Study Hub
+                            </span>
+                            <span className="text-xl font-serif italic tracking-wide text-theme-text uppercase leading-none">Aurem Lens</span>
+                        </div>
+                    )}
+                    <button
+                        onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                        className="p-3 rounded-xl transition-colors duration-300 group relative text-theme-muted hover:text-theme-text hover:bg-theme-primary/5 cursor-none"
+                    >
+                        <MenuIcon className="w-5 h-5 relative z-10 transition-transform duration-300 group-hover:rotate-180" />
                     </button>
                 </div>
 
-                <nav className="flex-1 px-3 space-y-2">
+                <nav className="flex-1 px-4 space-y-3">
                     {[
-                        { id: 'notes', label: 'Detailed Notes', icon: FileText },
-                        { id: 'summaries', label: 'Executive Summary', icon: Layers },
-                        { id: 'cards', label: 'Flashcards & Maps', icon: CreditCard },
-                        { id: 'quiz', label: 'Quiz & Assessment', icon: Trophy }
+                        { id: 'notes', label: 'Detailed Notes', icon: FileText, color: 'indigo' },
+                        { id: 'summaries', label: 'Executive Summary', icon: Layers, color: 'violet' },
+                        { id: 'cards', label: 'Flashcards & Maps', icon: CreditCard, color: 'emerald' },
+                        { id: 'quiz', label: 'Quiz & Assessment', icon: Trophy, color: 'amber' },
+                        { id: 'socratic', label: 'Socratic Tutor', icon: ShieldAlert, color: 'indigo', disabled: true },
+                        ...(masterpieceContent ? [
+                            { id: 'masterpiece', label: 'Definitive Chapter', icon: Crown, color: 'orange' }
+                        ] : [])
                     ].map(item => (
                         <button
                             key={item.id}
-                            onClick={() => setActiveSection(item.id)}
-                            className={`w-full flex items-center gap-3 p-3.5 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all duration-300
+                            onClick={() => {
+                                if (item.disabled) return;
+                                if (item.id === 'retina_study') {
+                                    fileInputRef.current?.click();
+                                } else {
+                                    setActiveSection(item.id);
+                                }
+                            }}
+                            className={`w-full flex items-center justify-between p-4 rounded-xl font-bold text-[10px] uppercase tracking-[0.2em] transition-all duration-500 group relative overflow-hidden
                                 ${activeSection === item.id
-                                    ? 'bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/20 scale-[1.02]'
-                                    : 'text-theme-muted hover:text-indigo-500 hover:bg-white/5'}
+                                    ? 'text-theme-primary border border-theme-primary/20 bg-theme-primary/5'
+                                    : 'text-theme-muted border border-transparent hover:text-theme-text hover:bg-theme-primary/5'
+                                }
+                                ${item.disabled ? 'opacity-50 cursor-not-allowed text-theme-muted hover:text-theme-muted hover:bg-transparent' : 'cursor-none'}
                                 ${isSidebarCollapsed ? 'justify-center px-0' : ''}
                             `}
                         >
-                            <item.icon className="w-5 h-5 shrink-0" />
-                            {!isSidebarCollapsed && <span>{item.label}</span>}
+                            {/* Active Background Gradient & Effects */}
+                            {activeSection === item.id && (
+                                <>
+                                    <div className="absolute inset-0 bg-theme-primary/10"></div>
+                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-theme-primary shadow-[0_0_10px_var(--theme-primary)]"></div>
+                                </>
+                            )}
+
+                            <div className="relative z-10 flex items-center gap-4">
+                                <item.icon className={`w-5 h-5 shrink-0 transition-transform duration-300 ${activeSection === item.id ? 'text-theme-primary' : (item.disabled ? '' : 'group-hover:scale-105')}`} />
+                                {!isSidebarCollapsed && <span className="relative z-10">{item.label}</span>}
+                            </div>
+
+                            {!isSidebarCollapsed && item.disabled && (
+                                <span className="text-[8px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 border border-amber-500/30 whitespace-nowrap">
+                                    Dev
+                                </span>
+                            )}
+
+                            {/* Hover highlight */}
+                            {!item.disabled && activeSection !== item.id && (
+                                <div className="absolute inset-0 bg-theme-primary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            )}
+
+                            {/* Notification dot indicator */}
+                            {item.id === 'cards' && flashcards.length > 0 && isSidebarCollapsed && (
+                                <span className="absolute top-3 right-3 w-2 h-2 bg-theme-primary rounded-full"></span>
+                            )}
+                            {item.id === 'quiz' && quizData && isSidebarCollapsed && (
+                                <span className="absolute top-3 right-3 w-2 h-2 bg-theme-primary rounded-full"></span>
+                            )}
                         </button>
                     ))}
                 </nav>
 
-                <div className={`p-4 mt-auto space-y-2 border-t ${isDark ? 'border-white/[0.04]' : 'border-slate-200'}`}>
+                <div className="p-6 mt-auto space-y-3 border-t border-theme-border relative overflow-hidden">
                     <button
                         onClick={() => {
                             setViewMode('input');
                             setDocumentContent('');
                             setFileData(null);
                         }}
-                        className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold text-sm transition-colors ${isDark ? 'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'}`}
+                        className="w-full relative z-10 flex items-center gap-3 p-3 rounded-lg font-bold text-xs transition-colors duration-300 border border-theme-primary/20 text-theme-primary hover:bg-theme-primary/10 cursor-none"
                     >
-                        <RefreshCw className="w-4 h-4" />
-                        {!isSidebarCollapsed && <span>New Session</span>}
+                        <RefreshCw className="w-4 h-4 shrink-0" />
+                        {!isSidebarCollapsed && <span>Start New Session</span>}
                     </button>
                     <button
                         onClick={() => {
                             if (onNavigate) onNavigate('doubt-solver');
                         }}
-                        className="w-full flex items-center gap-3 p-3 text-slate-500 hover:bg-red-500/10 hover:text-red-500 rounded-xl font-bold text-sm transition-colors"
+                        className="w-full relative z-10 flex items-center gap-3 p-3 rounded-lg font-bold text-xs transition-colors duration-300 text-theme-muted hover:text-red-400 hover:bg-red-500/5 border border-transparent hover:border-red-500/20 cursor-none"
                     >
-                        <X className="w-4 h-4" />
-                        {!isSidebarCollapsed && <span>Exit to Main</span>}
+                        <X className="w-4 h-4 shrink-0" />
+                        {!isSidebarCollapsed && <span>Exit to Hub</span>}
                     </button>
                 </div>
             </aside>
 
             {/* Main Content */}
-            <main className={`flex-1 flex flex-col overflow-hidden ${isDark ? 'bg-midnight-900' : 'bg-warm-50'}`}>
-                <div className="flex-1 overflow-y-auto p-6 md:p-10 custom-scrollbar">
-                    <div className="max-w-4xl mx-auto w-full">
+            <main className="flex-1 flex flex-col overflow-hidden relative z-10 bg-theme-bg">
+                <div className="flex-1 overflow-y-auto p-6 md:p-10 lg:p-12 custom-scrollbar">
+                    <div className="w-full mx-auto">
 
                         {/* Notes Section */}
                         {activeSection === 'notes' && (
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <div className={`rounded-[32px] border p-8 md:p-12 glass-3d
-                                    ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-white border-warm-200/50 shadow-sm'}
-                                `}>
+                                <div className="rounded-[24px] border p-8 md:p-12 lg:p-16 border-theme-border bg-theme-surface shadow-depth">
                                     <MarkdownRenderer text={notes} isDark={isDark} />
                                 </div>
 
                                 {/* Phase 7: Mastery Progression Gate */}
                                 {masteryLevel !== 'Advanced' && (
-                                    <div className={`mt-12 p-8 md:p-12 border rounded-[32px] text-center glass-3d animate-in slide-in-from-bottom-8 ${isDark ? 'border-indigo-500/20 bg-indigo-500/5' : 'border-indigo-200 bg-indigo-50'}`}>
-                                        <div className="inline-block px-3 py-1 mb-4 rounded-full bg-orange-500/20 text-orange-500 font-black uppercase tracking-widest text-[10px] border border-orange-500/20">Under Development (Beta Version)</div>
-                                        <h4 className="text-2xl font-black text-indigo-500 mb-2">Ready to Level Up?</h4>
-                                        <p className={`${isDark ? 'text-slate-400' : 'text-slate-600'} mb-8 font-medium max-w-lg mx-auto`}>You are currently viewing <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{masteryLevel}</span> notes. Pass the required assessment to unlock deeper concepts.</p>
-                                        <button
-                                            onClick={() => {
-                                                setActiveSection('quiz');
-                                                if (!quizData) generateSpecificTool('quiz');
-                                            }}
-                                            className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-violet-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-500/20 hover:scale-105 transition-all text-lg"
-                                        >
-                                            Take {masteryLevel} Assessment
-                                        </button>
+                                    <div className="mt-14 p-10 md:p-14 border rounded-[32px] text-center relative overflow-hidden transition-all duration-500 border-theme-border bg-theme-surface shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+
+                                        <div className="absolute top-0 right-0 w-64 h-64 bg-theme-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
+                                        <div className="absolute bottom-0 left-0 w-64 h-64 bg-theme-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
+
+                                        <div className="relative z-10 flex flex-col items-center">
+                                            <div className="w-16 h-16 rounded-2xl border border-theme-border bg-theme-primary/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                                                <Crown className="w-8 h-8 text-theme-primary" />
+                                            </div>
+
+                                            <h4 className="text-3xl font-serif italic text-theme-text tracking-wide mb-3">
+                                                Ready to Level Up?
+                                            </h4>
+                                            <p className="text-theme-muted mb-10 font-light max-w-lg mx-auto leading-relaxed">
+                                                You have mastered the <span className="font-bold text-theme-text">{masteryLevel}</span> tier. Pass the required assessment algorithm to unlock the next level of cognitive depth.
+                                            </p>
+
+                                            <button
+                                                onClick={() => {
+                                                    setActiveSection('quiz');
+                                                    if (!quizData) generateSpecificTool('quiz');
+                                                }}
+                                                className="group px-10 py-4 bg-theme-primary/10 text-theme-primary hover:bg-theme-primary hover:text-theme-bg font-bold tracking-[0.1em] uppercase text-sm rounded-xl transition-colors duration-300 flex items-center gap-3 relative overflow-hidden border border-theme-primary/30 cursor-none"
+                                            >
+                                                <span className="relative z-10">Take {masteryLevel} Assessment</span>
+                                                <ChevronRight className="w-4 h-4 relative z-10 group-hover:translate-x-1 transition-transform" />
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -894,11 +1121,22 @@ The summary should be a concise, structured overview suitable for quick revision
 
                         {/* Summaries Section */}
                         {activeSection === 'summaries' && (
-                            <div className="animate-in fade-in duration-500">
-                                <div className={`rounded-[32px] border p-8 md:p-12 glass-3d
-                                    ${isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-white border-warm-200/50 shadow-sm'}
-                                `}>
-                                    <MarkdownRenderer text={summary} isDark={isDark} />
+                            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className="rounded-[24px] border border-theme-border bg-theme-surface p-8 md:p-12 shadow-depth relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-64 h-64 bg-theme-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
+
+                                    <div className="relative z-10">
+                                        <div className="flex items-center gap-3 mb-8 pb-6 border-b border-theme-border">
+                                            <div className="w-10 h-10 rounded-xl border border-theme-primary/20 bg-theme-primary/5 flex items-center justify-center text-theme-primary">
+                                                <Layers className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-2xl font-serif italic text-theme-text tracking-wide">Executive Summary</h2>
+                                                <p className="text-[10px] font-bold text-theme-primary uppercase tracking-[0.2em] mt-1">High-Level Overview</p>
+                                            </div>
+                                        </div>
+                                        <MarkdownRenderer text={summary} />
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -907,12 +1145,12 @@ The summary should be a concise, structured overview suitable for quick revision
                         {activeSection === 'cards' && (
                             <div className="max-w-5xl mx-auto space-y-12 pb-12 animate-in fade-in duration-500">
                                 {!flashcards.length && !isActionLoading && (
-                                    <div className={`text-center py-20 border-2 border-dashed rounded-3xl ${isDark ? 'border-white/[0.08]' : 'border-slate-200'}`}>
-                                        <CreditCard className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-                                        <h3 className="text-xl font-bold mb-4">No Learning Assets Yet</h3>
+                                    <div className="text-center py-20 border border-theme-border border-dashed rounded-[24px] bg-theme-surface/50">
+                                        <CreditCard className="w-12 h-12 text-theme-muted mx-auto mb-4 opacity-50" />
+                                        <h3 className="text-xl font-serif italic text-theme-text mb-4">No Learning Assets Yet</h3>
                                         <button
                                             onClick={() => generateSpecificTool('cards')}
-                                            className="px-8 py-3 bg-gradient-to-r from-indigo-500 to-violet-600 text-white font-bold rounded-2xl shadow-lg shadow-indigo-500/20"
+                                            className="px-8 py-3 bg-theme-primary/10 text-theme-primary hover:bg-theme-primary hover:text-theme-bg font-bold tracking-[0.1em] uppercase text-xs rounded-xl transition-colors duration-300 border border-theme-primary/30 cursor-none"
                                         >
                                             Generate Flashcards
                                         </button>
@@ -940,24 +1178,24 @@ The summary should be a concise, structured overview suitable for quick revision
                                             </div>
                                         </section>
 
-                                        <section className={`${isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-white border-slate-200'} border rounded-3xl overflow-hidden shadow-depth`}>
-                                            <div className={`p-8 border-b flex justify-between items-center ${isDark ? 'border-white/[0.06]' : 'border-slate-200'}`}>
+                                        <section className="bg-theme-surface border-theme-border border rounded-2xl overflow-hidden shadow-depth">
+                                            <div className="p-8 border-b flex justify-between items-center border-theme-border">
                                                 <div>
-                                                    <h3 className="text-lg font-bold">Visual Mind Map</h3>
-                                                    <p className="text-slate-500 text-sm">Spatial representation of core concepts</p>
+                                                    <h3 className="text-xl font-serif italic tracking-wide text-theme-text">Visual Mind Map</h3>
+                                                    <p className="text-theme-muted text-sm font-light mt-1">Spatial representation of core concepts</p>
                                                 </div>
                                                 <button
                                                     onClick={() => generateSpecificTool('mindmap')}
-                                                    className={`px-4 py-2 font-bold rounded-xl text-xs transition-colors ${isDark ? 'bg-white/[0.05] text-slate-300 hover:bg-white/[0.1]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                                    className="px-6 py-2 border border-theme-primary/30 text-theme-primary text-xs uppercase tracking-widest hover:bg-theme-primary/10 transition-colors rounded-lg cursor-none focus:outline-none"
                                                 >
                                                     Regenerate
                                                 </button>
                                             </div>
-                                            <div className="h-[500px] w-full">
+                                            <div className="h-[500px] w-full bg-theme-bg/50">
                                                 {mindMapData ? (
                                                     <MindMapViewer data={mindMapData} />
                                                 ) : (
-                                                    <div className="h-full flex items-center justify-center text-slate-700 font-bold italic">
+                                                    <div className="h-full flex items-center justify-center text-theme-muted font-serif italic">
                                                         Click 'Regenerate' to visualize concepts
                                                     </div>
                                                 )}
@@ -972,13 +1210,13 @@ The summary should be a concise, structured overview suitable for quick revision
                         {activeSection === 'quiz' && (
                             <div className="max-w-4xl mx-auto h-full animate-in fade-in duration-500">
                                 {!quizData && !isActionLoading && (
-                                    <div className="text-center py-20">
-                                        <Trophy className="w-16 h-16 text-yellow-500/20 mx-auto mb-6" />
-                                        <h3 className="text-2xl font-bold mb-4">Test Your Mastery</h3>
-                                        <p className="text-slate-500 mb-8 max-w-md mx-auto">Generate a custom-built quiz based on the document's complex points to identify your gaps.</p>
+                                    <div className="text-center py-24 px-6 border border-theme-border bg-theme-surface rounded-3xl shadow-depth">
+                                        <Trophy className="w-16 h-16 text-theme-primary/50 mx-auto mb-6 drop-shadow-[0_0_15px_rgba(var(--theme-primary),0.2)]" />
+                                        <h3 className="text-3xl font-serif italic text-theme-text mb-4">Test Your Mastery</h3>
+                                        <p className="text-theme-muted font-light mb-10 max-w-md mx-auto text-lg">Generate a custom-built quiz based on the document's complex points to identify your gaps.</p>
 
                                         {quizError && (
-                                            <div className="max-w-md mx-auto mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 text-left">
+                                            <div className="max-w-md mx-auto mb-8 p-4 bg-red-900/10 border border-red-500/20 rounded-xl flex items-start gap-3 text-left">
                                                 <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                                                 <p className="text-red-400 text-sm leading-relaxed">{quizError}</p>
                                             </div>
@@ -986,9 +1224,9 @@ The summary should be a concise, structured overview suitable for quick revision
 
                                         <button
                                             onClick={() => { setQuizError(null); generateSpecificTool('quiz'); }}
-                                            className="px-10 py-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold rounded-3xl shadow-xl shadow-amber-500/20 hover:scale-105 transition-all"
+                                            className="px-12 py-4 border border-theme-primary/30 text-theme-primary hover:bg-theme-primary hover:text-theme-bg font-bold tracking-[0.2em] uppercase text-sm rounded-xl transition-all duration-300 cursor-none"
                                         >
-                                            {quizError ? 'Retry Assessment' : 'Start Assessment'}
+                                            {quizError ? 'RETRY ASSESSMENT' : 'START ASSESSMENT'}
                                         </button>
                                     </div>
                                 )}
@@ -1008,24 +1246,102 @@ The summary should be a concise, structured overview suitable for quick revision
                                             onMastery={(results) => {
                                                 console.log("Mastery Achieved", results);
                                                 setIsLevelUnlocked(true);
+                                                if (masteryLevel === 'Advanced' && results.score >= 80) {
+                                                    generateFinalMasterpiece();
+                                                }
                                             }}
+                                            isDark={isDark}
+                                            MarkdownRenderer={MarkdownRenderer}
                                         />
 
                                         {/* Inject Next Level trigger if they score >= 60 in MasteryLoop */}
-                                        {masteryLevel !== 'Advanced' && isLevelUnlocked && (
-                                            <div className="mt-8 text-center animate-in fade-in duration-700 delay-500">
-                                                <p className="text-sm font-bold text-emerald-500 mb-4 uppercase tracking-widest">Mastery Achieved</p>
+                                        {isLevelUnlocked && (
+                                            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-700 delay-500">
+                                                {masteryLevel !== 'Advanced' && (
+                                                    <button
+                                                        onClick={handleLevelUp}
+                                                        className="px-8 py-4 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500 hover:text-theme-bg font-bold tracking-[0.1em] uppercase text-sm rounded-xl transition-colors duration-300 cursor-none"
+                                                    >
+                                                        UNLOCK {masteryLevel === 'Beginner' ? 'INTERMEDIATE' : 'ADVANCED'}
+                                                    </button>
+                                                )}
                                                 <button
-                                                    onClick={handleLevelUp}
-                                                    className="px-10 py-4 bg-emerald-500 text-white font-black rounded-3xl hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-500/30 w-full"
+                                                    onClick={() => onNavigate('neural-arena')}
+                                                    className="px-8 py-4 border border-theme-primary/30 text-theme-primary hover:bg-theme-primary hover:text-theme-bg font-bold tracking-[0.1em] uppercase text-sm rounded-xl transition-colors duration-300 flex items-center justify-center gap-2 cursor-none"
                                                 >
-                                                    UNLOCK {masteryLevel === 'Beginner' ? 'INTERMEDIATE' : 'ADVANCED'} NOTES
+                                                    <Swords className="w-4 h-4" /> NEURAL ARENA
                                                 </button>
                                             </div>
                                         )}
                                     </div>
                                 )}
                             </div>
+                        )}
+                        {/* Final Masterpiece Section */}
+                        {activeSection === 'masterpiece' && (
+                            <div className="animate-in fade-in zoom-in duration-700">
+                                {isGeneratingMasterpiece ? (
+                                    <div className="py-32 text-center space-y-8 bg-theme-surface rounded-[32px] border border-theme-primary/20 shadow-depth relative overflow-hidden">
+                                        <div className="absolute inset-0 bg-theme-primary/5 pointer-events-none"></div>
+                                        <div className="relative w-24 h-24 mx-auto z-10">
+                                            <Crown className="w-14 h-14 text-theme-primary animate-pulse mx-auto" />
+                                        </div>
+                                        <h2 className="relative z-10 text-3xl font-serif italic text-theme-text tracking-wide">
+                                            Synthesizing Your Masterpiece
+                                        </h2>
+                                        <p className="text-theme-muted max-w-md mx-auto font-bold uppercase tracking-[0.2em] text-xs">
+                                            Architecting the world's most detailed chapter on {fileName}...
+                                        </p>
+                                        <div className="w-48 h-0.5 bg-theme-border rounded-full mx-auto overflow-hidden">
+                                            <div className="h-full bg-theme-primary rounded-full animate-[progress_15s_linear_infinite] w-full"></div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-12 pb-24">
+                                        <div className="text-center py-16 px-6 rounded-[32px] border border-theme-primary/20 bg-theme-surface relative overflow-hidden shadow-depth">
+                                            <div className="absolute -top-32 -right-32 w-80 h-80 bg-theme-primary/5 rounded-full blur-[100px] pointer-events-none"></div>
+                                            <div className="relative z-10">
+                                                <Crown className="w-14 h-14 text-theme-primary mx-auto mb-6" />
+                                                <h1 className="text-4xl md:text-5xl font-serif italic text-theme-text mb-3 tracking-wide">The Definitive Chapter</h1>
+                                                <p className="text-theme-primary font-bold uppercase tracking-[0.3em] text-[11px] opacity-80">Post-Advanced Mastery Document</p>
+                                            </div>
+                                        </div>
+                                        <div className="prose prose-invert max-w-none">
+                                            <MarkdownRenderer text={masterpieceContent} isDark={isDark} />
+                                        </div>
+
+                                        {/* Entry to Socratic Room */}
+                                        <div className="mt-20 p-12 rounded-[32px] border border-theme-primary/20 bg-theme-surface text-center space-y-6 animate-in slide-in-from-bottom-8 duration-700 shadow-depth relative overflow-hidden">
+                                            <div className="absolute inset-0 z-50 bg-theme-bg/50 backdrop-blur-[2px] flex flex-col items-center justify-center">
+                                                <span className="text-xs font-bold uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-500 border border-amber-500/30 mb-2 shadow-[0_0_30px_rgba(245,158,11,0.2)]">
+                                                    Under Development
+                                                </span>
+                                            </div>
+                                            <div className="w-16 h-16 rounded-full border border-theme-primary/20 bg-theme-primary/5 flex items-center justify-center mx-auto relative z-10 opacity-30">
+                                                <ShieldAlert className="w-8 h-8 text-theme-primary" />
+                                            </div>
+                                            <h3 className="text-2xl font-serif italic text-theme-text relative z-10 tracking-wide opacity-30">The Socratic Challenge</h3>
+                                            <p className="text-theme-muted max-w-md mx-auto relative z-10 leading-relaxed font-light opacity-30">You've mastered the content. Now, can you defend it? Enter the Socratic Room to face the Grandmaster.</p>
+                                            <button
+                                                disabled
+                                                className="relative z-10 mt-4 px-10 py-4 border border-theme-primary/30 text-theme-muted bg-theme-surface font-bold tracking-[0.2em] uppercase text-sm rounded-xl transition-colors duration-300 opacity-50 cursor-not-allowed"
+                                            >
+                                                ENTER SOCRATIC ROOM (PAUSED)
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Socratic Room Section */}
+                        {activeSection === 'socratic' && (
+                            <SocraticRoom
+                                topic={fileName}
+                                documentContent={documentContent}
+                                isDark={isDark}
+                                MarkdownRenderer={MarkdownRenderer}
+                            />
                         )}
                     </div>
                 </div>
@@ -1034,10 +1350,10 @@ The summary should be a concise, structured overview suitable for quick revision
             {/* Floating Chat Toggle */}
             <button
                 onClick={() => setIsChatOpen(true)}
-                className="fixed bottom-8 right-8 z-40 p-4 bg-gradient-to-r from-indigo-500 to-violet-600 text-white rounded-2xl shadow-2xl shadow-indigo-500/30 hover:scale-110 active:scale-95 transition-all duration-300 group"
+                className="fixed bottom-8 right-8 z-40 p-4 border border-theme-primary/30 bg-theme-surface text-theme-primary hover:bg-theme-primary hover:text-theme-bg rounded-xl shadow-depth transition-colors duration-300 group cursor-none"
                 title="Open Study Assistant"
             >
-                <MessageSquare className="w-6 h-6 group-hover:rotate-12 transition-transform" />
+                <MessageSquare className="w-5 h-5 group-hover:rotate-12 transition-transform" />
             </button>
 
             {/* Full-screen Chat Overlay */}
@@ -1047,7 +1363,7 @@ The summary should be a concise, structured overview suitable for quick revision
 
     if (viewMode !== 'input') {
         return createPortal(
-            <div className={`fixed inset-0 z-50 ${isDark ? 'bg-midnight-900 text-white' : 'bg-warm-50 text-slate-900'} transition-colors duration-300 font-sans`}>
+            <div className="fixed inset-0 z-50 bg-theme-bg text-theme-text transition-colors duration-300 font-sans">
                 {viewMode === 'loading' && renderLoadingView()}
                 {viewMode === 'study' && renderStudyMode()}
             </div>,
@@ -1056,7 +1372,7 @@ The summary should be a concise, structured overview suitable for quick revision
     }
 
     return (
-        <div className={`h-full ${isDark ? 'bg-midnight-900 text-white' : 'bg-warm-50 text-slate-900'} transition-colors duration-300 font-sans`}>
+        <div className="h-full bg-theme-bg text-theme-text transition-colors duration-300 font-sans">
             {renderInputView()}
         </div>
     );

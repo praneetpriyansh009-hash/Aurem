@@ -5,11 +5,11 @@ import { Sparkles, Crown, Zap, Mic, GraduationCap, Brain, X, Check, Infinity, Cr
 
 const UpgradeModal = () => {
     const { isDark } = useTheme();
-    const { showUpgradeModal, setShowUpgradeModal, upgradeFeature, upgradeToPro, tier } = useSubscription();
+    const { showUpgradeModal, setShowUpgradeModal, upgradeFeature, upgradeToPro, upgradeToGo, tier } = useSubscription();
     const [showPayment, setShowPayment] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [paymentSuccess, setPaymentSuccess] = useState(false);
-
+    const [selectedPlan, setSelectedPlan] = useState('pro');
 
     if (!showUpgradeModal) return null;
 
@@ -25,7 +25,8 @@ const UpgradeModal = () => {
     const featureName = featureNames[upgradeFeature] || 'this feature';
     const isDirectUpgrade = upgradeFeature === 'upgrade';
 
-    const handleUpgradeClick = () => {
+    const handleUpgradeClick = (plan) => {
+        setSelectedPlan(plan);
         setShowPayment(true);
     };
 
@@ -38,11 +39,21 @@ const UpgradeModal = () => {
         setIsProcessing(false);
         setPaymentSuccess(true);
 
-        // Activate Pro after "payment"
+        // Activate Pro/Go after "payment"
         setTimeout(() => {
-            upgradeToPro();
-            setShowPayment(false);
-            setPaymentSuccess(false);
+            if (selectedPlan === 'go') {
+                upgradeToGo();
+            } else {
+                upgradeToPro();
+            }
+
+            setShowUpgradeModal(false);
+
+            // Clean up state a bit later to avoid the glitch where modal flashes open again
+            setTimeout(() => {
+                setShowPayment(false);
+                setPaymentSuccess(false);
+            }, 500);
         }, 1500);
     };
 
@@ -88,15 +99,15 @@ const UpgradeModal = () => {
                             )}
                         </div>
                         <h2 className="text-2xl font-black mb-2">
-                            {paymentSuccess ? 'Payment Successful!' : showPayment ? 'Complete Payment' : isDirectUpgrade ? 'Upgrade to Pro' : 'Daily Limit Reached'}
+                            {paymentSuccess ? 'Payment Successful!' : showPayment ? 'Complete Payment' : isDirectUpgrade ? 'Choose Your Plan' : 'Daily Limit Reached'}
                         </h2>
                         <p className="text-white/80 text-sm">
                             {paymentSuccess
-                                ? 'Welcome to Aurem Pro! Activating your account...'
+                                ? `Welcome to Aurem ${selectedPlan === 'go' ? 'Go' : 'Pro'}! Activating...`
                                 : showPayment
                                     ? 'Enter your payment details below'
                                     : isDirectUpgrade
-                                        ? 'Unlock unlimited access to all features'
+                                        ? 'Unlock more power and features'
                                         : `You've used all your free ${featureName} for today`
                             }
                         </p>
@@ -107,47 +118,78 @@ const UpgradeModal = () => {
                 <div className="p-8 -mt-6">
                     {!showPayment ? (
                         /* Benefits View */
-                        <div className={`rounded-[32px] p-6 border-2 glass-3d glow-border ${isDark ? 'bg-orange-500/10 border-orange-500/30' : 'bg-orange-50 border-orange-200'}`}>
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-3">
-                                    <Sparkles className="w-6 h-6 text-orange-500" />
-                                    <span className="font-black text-lg text-orange-500">AUREM PRO</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* GO Plan */}
+                            <div className={`rounded-[24px] p-5 border-2 glass-3d glow-border flex flex-col ${isDark ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-emerald-50 border-emerald-200'}`}>
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <Zap className="w-5 h-5 text-emerald-500" />
+                                        <span className="font-black text-md text-emerald-500">AUREM GO</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-xl font-black text-emerald-500">₹600</span>
+                                        <span className="text-xs text-gray-500">/mo</span>
+                                    </div>
                                 </div>
-                                <div className="text-right">
-                                    <span className="text-2xl font-black text-orange-500">₹499</span>
-                                    <span className="text-sm text-gray-500">/month</span>
-                                </div>
+                                <ul className="space-y-2 mb-6 flex-1">
+                                    {[
+                                        { icon: Mic, text: '5 Podcasts / day' },
+                                        { icon: Brain, text: '10 Quizzes / day' },
+                                        { icon: GraduationCap, text: '5 College Compass' }
+                                    ].map((item, i) => (
+                                        <li key={`go-${i}`} className="flex items-center gap-2">
+                                            <div className={`p-1 rounded-lg ${isDark ? 'bg-emerald-500/20' : 'bg-emerald-100'}`}>
+                                                <item.icon className="w-3.5 h-3.5 text-emerald-500" />
+                                            </div>
+                                            <span className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                {item.text}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <button
+                                    onClick={() => handleUpgradeClick('go')}
+                                    className="w-full py-3 bg-emerald-500 text-white rounded-xl font-black text-sm shadow-lg shadow-emerald-500/30 hover:scale-[1.02] transition-all"
+                                >
+                                    Get Go
+                                </button>
                             </div>
 
-                            <ul className="space-y-3 mb-6">
-                                {[
-                                    { icon: Infinity, text: 'Unlimited Doubt Solving' },
-                                    { icon: GraduationCap, text: 'Unlimited College Compass' },
-                                    { icon: Mic, text: 'Unlimited 15-min Podcasts' },
-                                    { icon: Brain, text: 'Unlimited Quiz & Assessments' },
-                                    { icon: Zap, text: 'Premium AI for better responses' }
-                                ].map((item, i) => (
-                                    <li key={i} className="flex items-center gap-3">
-                                        <div className={`p-1.5 rounded-lg ${isDark ? 'bg-orange-500/20' : 'bg-orange-100'}`}>
-                                            <item.icon className="w-4 h-4 text-orange-500" />
-                                        </div>
-                                        <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                            {item.text}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-
-                            <button
-                                onClick={handleUpgradeClick}
-                                className="w-full py-4 bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-white rounded-xl font-black text-lg shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.02] transition-all"
-                            >
-                                Upgrade to Pro — ₹499/month
-                            </button>
-
-                            <p className="text-center text-xs text-gray-500 mt-3">
-                                Cancel anytime • 7-day money back guarantee
-                            </p>
+                            {/* PRO Plan */}
+                            <div className={`rounded-[24px] p-5 border-2 glass-3d glow-border flex flex-col ${isDark ? 'bg-orange-500/10 border-orange-500/30' : 'bg-orange-50 border-orange-200'}`}>
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <Sparkles className="w-5 h-5 text-orange-500" />
+                                        <span className="font-black text-md text-orange-500">AUREM PRO</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-xl font-black text-orange-500">₹900</span>
+                                        <span className="text-xs text-gray-500">/mo</span>
+                                    </div>
+                                </div>
+                                <ul className="space-y-2 mb-6 flex-1">
+                                    {[
+                                        { icon: Infinity, text: 'Unlimited Everything' },
+                                        { icon: Mic, text: '15-min Podcasts' },
+                                        { icon: Crown, text: 'Premium AI models' }
+                                    ].map((item, i) => (
+                                        <li key={`pro-${i}`} className="flex items-center gap-2">
+                                            <div className={`p-1 rounded-lg ${isDark ? 'bg-orange-500/20' : 'bg-orange-100'}`}>
+                                                <item.icon className="w-3.5 h-3.5 text-orange-500" />
+                                            </div>
+                                            <span className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                {item.text}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <button
+                                    onClick={() => handleUpgradeClick('pro')}
+                                    className="w-full py-3 bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 text-white rounded-xl font-black text-sm shadow-lg shadow-orange-500/30 hover:scale-[1.02] transition-all"
+                                >
+                                    Get Pro
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         /* Payment Form View */
@@ -217,7 +259,7 @@ const UpgradeModal = () => {
                                         ) : (
                                             <>
                                                 <CreditCard className="w-5 h-5" />
-                                                Pay ₹499
+                                                {selectedPlan === 'go' ? 'Pay ₹600' : 'Pay ₹900'}
                                             </>
                                         )}
                                     </button>
@@ -239,7 +281,7 @@ const UpgradeModal = () => {
                                         <Check className="w-10 h-10 text-green-500" />
                                     </div>
                                     <h3 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                        Welcome to Pro!
+                                        Welcome to {selectedPlan === 'go' ? 'Aurem Go' : 'Aurem Pro'}!
                                     </h3>
                                     <p className="text-gray-500">
                                         Activating your unlimited access...

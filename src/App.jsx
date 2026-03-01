@@ -3,6 +3,7 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SubscriptionProvider, useSubscription } from './contexts/SubscriptionContext';
 import { LearnLoopProvider, useLearnLoop } from './contexts/LearnLoopContext';
+import { PerformanceProvider } from './contexts/PerformanceContext';
 import SplashScreen from './components/SplashScreen';
 import Sidebar from './components/Sidebar';
 import DoubtSolver from './components/DoubtSolver';
@@ -15,35 +16,48 @@ import UpgradeModal from './components/UpgradeModal';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Settings from './components/Settings';
-import { Bot, GraduationCap, FileText, Menu, LogIn, FilePlus, Mic, Sparkles, ClipboardList, Settings as SettingsIcon, RefreshCw, Video, Eye, Trophy } from './components/Icons';
+import { Bot, GraduationCap, FileText, Menu, LogIn, FilePlus, Mic, Sparkles, ClipboardList, Settings as SettingsIcon, RefreshCw, Video, Eye, Trophy, Swords } from './components/Icons';
 import { useRetryableFetch } from './utils/api';
 import SamplePaperGenerator from './components/SamplePaperGenerator';
 import LoopManager from './components/LearnLoop/LoopManager';
 import LandingPageV2 from './components/LandingPageV2';
 import ExamHub from './components/ExamHub';
+import NeuralArena from './components/NeuralArena';
 import ErrorBoundary from './components/ErrorBoundary';
 import OnboardingGuide from './components/OnboardingGuide';
 
-// Floating particles background
-const FloatingParticles = () => (
-    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        {Array.from({ length: 6 }, (_, i) => (
-            <div
-                key={i}
-                className="absolute rounded-full bg-indigo-500/[0.03]"
-                style={{
-                    width: `${150 + i * 60}px`,
-                    height: `${150 + i * 60}px`,
-                    top: `${10 + i * 15}%`,
-                    left: `${5 + i * 16}%`,
-                    filter: `blur(${60 + i * 15}px)`,
-                    animation: `globalFloat ${12 + i * 3}s ease-in-out infinite`,
-                    animationDelay: `${-i * 2}s`,
-                }}
-            />
-        ))}
-    </div>
-);
+// Luminary Custom Cursor Tracker
+const CustomCursor = () => {
+    const [pos, setPos] = useState({ x: 0, y: 0 });
+    const [isHovering, setIsHovering] = useState(false);
+
+    useEffect(() => {
+        const moveCursor = (e) => {
+            setPos({ x: e.clientX, y: e.clientY });
+        };
+        const handleMouseOver = (e) => {
+            if (e.target.closest('button, a, input, select, textarea, [role="button"], .interactive')) {
+                setIsHovering(true);
+            } else {
+                setIsHovering(false);
+            }
+        };
+
+        window.addEventListener('mousemove', moveCursor);
+        window.addEventListener('mouseover', handleMouseOver);
+        return () => {
+            window.removeEventListener('mousemove', moveCursor);
+            window.removeEventListener('mouseover', handleMouseOver);
+        };
+    }, []);
+
+    return (
+        <>
+            <div className="cursor-dot" style={{ left: pos.x, top: pos.y, opacity: isHovering ? 0 : 1 }} />
+            <div className="cursor-circle" style={{ left: pos.x, top: pos.y, transform: `translate(-50%, -50%) scale(${isHovering ? 1.5 : 1})`, borderColor: isHovering ? 'var(--gold-light)' : 'var(--gold)' }} />
+        </>
+    );
+};
 
 const AppContent = () => {
     const { isDark } = useTheme();
@@ -124,6 +138,7 @@ const AppContent = () => {
             case 'quiz-assessment': return <QuizAssessment retryableFetch={retryableFetch} onNavigate={setCurrentView} />;
             case 'sample-paper': return <SamplePaperGenerator retryableFetch={retryableFetch} />;
             case 'exam-hub': return <ExamHub />;
+            case 'neural-arena': return <NeuralArena onExit={() => setCurrentView('document-study')} setIsCollapsed={setIsCollapsed} />;
             default: return <DoubtSolver retryableFetch={retryableFetch} />;
         }
     };
@@ -131,15 +146,16 @@ const AppContent = () => {
     const getHeaderTitle = () => {
         const titles = {
             'settings': 'Settings',
-            'learn-loop': 'Learn Loop',
-            'doubt-solver': 'Doubt Solver',
+            'learn-loop': 'Mastery Lifecycle',
+            'doubt-solver': 'Neural Query',
             'document-study': 'Aurem Lens',
-            'college-compass': 'College Compass',
-            'podcast-generator': 'Podcast Studio',
-            'video-generator': 'AI Video Studio',
-            'quiz-assessment': 'Quiz & Assessment',
-            'sample-paper': 'Smart Paper Generator',
-            'exam-hub': 'Competitive Hub',
+            'college-compass': 'Admissions Pilot',
+            'podcast-generator': 'Audio Studio',
+            'video-generator': 'Visual Studio',
+            'quiz-assessment': 'Adaptive Testing',
+            'sample-paper': 'Dynamic Paper Gen',
+            'exam-hub': 'Competitive Prep',
+            'neural-arena': 'Cognitive Colosseum',
         };
         return titles[currentView] || 'Aurem';
     };
@@ -147,108 +163,96 @@ const AppContent = () => {
     const getHeaderIcon = () => {
         const iconMap = {
             'settings': <SettingsIcon className="w-5 h-5 mr-2 text-theme-muted" />,
-            'learn-loop': <RefreshCw className="w-5 h-5 mr-2 text-violet-500" />,
-            'doubt-solver': <Bot className="w-5 h-5 mr-2 text-violet-500" />,
-            'document-study': <Eye className="w-5 h-5 mr-2 text-amber-500" />,
-            'college-compass': <GraduationCap className="w-5 h-5 mr-2 text-cyan-500" />,
-            'podcast-generator': <Mic className="w-5 h-5 mr-2 text-rose-500" />,
-            'video-generator': <Video className="w-5 h-5 mr-2 text-fuchsia-500" />,
-            'quiz-assessment': <ClipboardList className="w-5 h-5 mr-2 text-emerald-500" />,
-            'sample-paper': <FileText className="w-5 h-5 mr-2 text-purple-500" />,
-            'exam-hub': <Trophy className="w-5 h-5 mr-2 text-yellow-500" />,
+            'learn-loop': <RefreshCw className="w-5 h-5 mr-2 text-gold" />,
+            'doubt-solver': <Bot className="w-5 h-5 mr-2 text-gold" />,
+            'document-study': <Eye className="w-5 h-5 mr-2 text-gold" />,
+            'college-compass': <GraduationCap className="w-5 h-5 mr-2 text-gold" />,
+            'podcast-generator': <Mic className="w-5 h-5 mr-2 text-gold" />,
+            'video-generator': <Video className="w-5 h-5 mr-2 text-gold-light" />,
+            'quiz-assessment': <ClipboardList className="w-5 h-5 mr-2 text-gold" />,
+            'sample-paper': <FileText className="w-5 h-5 mr-2 text-gold-light" />,
+            'exam-hub': <Trophy className="w-5 h-5 mr-2 text-gold" />,
+            'neural-arena': <Swords className="w-5 h-5 mr-2 text-gold" />,
         };
-        return iconMap[currentView] || <Sparkles className="w-5 h-5 mr-2 text-amber-500" />;
+        return iconMap[currentView] || <Sparkles className="w-5 h-5 mr-2 text-gold" />;
     };
 
     // ═══ RENDER PHASES ═══
+    const renderPhase = () => {
+        // Initial splash
+        if (phase === 'splash') {
+            return <SplashScreen onComplete={handleSplashComplete} />;
+        }
 
-    // Initial splash
-    if (phase === 'splash') {
-        return <SplashScreen onComplete={handleSplashComplete} />;
-    }
+        // Landing page (new users)
+        if (phase === 'landing') {
+            return <LandingPageV2 onGetStarted={handleGetStarted} />;
+        }
 
-    // Landing page (new users)
-    if (phase === 'landing') {
-        return <LandingPageV2 onGetStarted={handleGetStarted} />;
-    }
+        // Second splash (after landing → before login)
+        if (phase === 'splash-to-login') {
+            return <SplashScreen onComplete={handleSecondSplashComplete} />;
+        }
 
-    // Second splash (after landing → before login)
-    if (phase === 'splash-to-login') {
-        return <SplashScreen onComplete={handleSecondSplashComplete} />;
-    }
+        // Login
+        if (phase === 'login') {
+            return <Login onSwitchToSignup={() => setPhase('signup')} />;
+        }
 
-    // Login
-    if (phase === 'login') {
-        return <Login onSwitchToSignup={() => setPhase('signup')} />;
-    }
+        // Signup
+        if (phase === 'signup') {
+            return <Signup onSwitchToLogin={() => setPhase('login')} />;
+        }
 
-    // Signup
-    if (phase === 'signup') {
-        return <Signup onSwitchToLogin={() => setPhase('login')} />;
-    }
+        // ═══ MAIN APP ═══
+        return (
+            <div className="flex w-full h-[100dvh] font-sans overflow-hidden bg-theme-bg text-theme-text transition-colors duration-500">
+                <UpgradeModal />
 
-    // ═══ MAIN APP ═══
-    return (
-        <div className={`flex h-[100dvh] font-sans overflow-hidden transition-colors duration-500
-            ${isDark ? 'bg-midnight-900' : 'bg-warm-50'}
-        `}>
-            {/* Global floating particles */}
-            <FloatingParticles />
+                {showOnboarding && <OnboardingGuide onComplete={handleOnboardingComplete} />}
 
-            {/* Aurora background */}
-            <div className="aurora-bg">
-                <div className="blob"></div>
-            </div>
+                <Sidebar
+                    currentView={currentView}
+                    setCurrentView={setCurrentView}
+                    isSidebarOpen={isSidebarOpen}
+                    setIsSidebarOpen={setIsSidebarOpen}
+                    isCollapsed={isCollapsed}
+                    setIsCollapsed={setIsCollapsed}
+                    user={currentUser}
+                    onLogin={() => setPhase('login')}
+                    onLogout={handleLogout}
+                />
 
-            <UpgradeModal />
-
-            {showOnboarding && <OnboardingGuide onComplete={handleOnboardingComplete} />}
-
-            <Sidebar
-                currentView={currentView}
-                setCurrentView={setCurrentView}
-                isSidebarOpen={isSidebarOpen}
-                setIsSidebarOpen={setIsSidebarOpen}
-                isCollapsed={isCollapsed}
-                setIsCollapsed={setIsCollapsed}
-                user={currentUser}
-                onLogin={() => setPhase('login')}
-                onLogout={handleLogout}
-            />
-
-            <div className={`
-                flex-1 flex flex-col h-full relative z-10 transition-all duration-500
-                md:my-[2vh] md:mr-[2vh] md:rounded-3xl overflow-hidden
-                ${isDark
-                    ? 'md:bg-midnight-800/50 md:border md:border-white/[0.04]'
-                    : 'md:bg-white/40 md:border md:border-warm-300/25'
-                }
-                md:shadow-depth md:backdrop-blur-xl
-            `}>
-                {/* Mobile Header */}
-                <header className={`md:hidden p-4 pt-12 shadow-sm flex items-center z-30 sticky top-0
-                    ${isDark
-                        ? 'bg-midnight-900/90 border-b border-white/[0.04]'
-                        : 'bg-warm-50/90 border-b border-warm-300/25'
-                    }
-                    backdrop-blur-xl
+                <div className={`
+                    flex-1 flex flex-col h-full relative z-10 transition-all duration-500
+                    md:my-[2vh] md:mr-[2vh] md:rounded-[32px] overflow-hidden bg-theme-surface border border-theme-border
                 `}>
-                    <button onClick={() => setIsSidebarOpen(true)} className="mr-3 text-theme-muted hover:text-theme-primary transition-colors">
-                        <Menu className="w-5 h-5" />
-                    </button>
-                    <h1 className={`font-display font-bold flex items-center ${isDark ? 'text-white' : 'text-warm-800'}`}>
-                        {getHeaderIcon()}
-                        {getHeaderTitle()}
-                    </h1>
-                </header>
+                    {/* Mobile Header */}
+                    <header className="md:hidden p-4 pt-12 flex items-center z-30 sticky top-0 bg-theme-bg/90 backdrop-blur-xl border-b border-theme-border">
+                        <button onClick={() => setIsSidebarOpen(true)} className="mr-3 text-theme-muted hover:text-theme-primary transition-colors cursor-none">
+                            <Menu className="w-5 h-5" />
+                        </button>
+                        <h1 className="font-serif italic font-light flex items-center text-theme-text">
+                            {getHeaderIcon()}
+                            {getHeaderTitle()}
+                        </h1>
+                    </header>
 
-                <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
-                    <div key={currentView} className="h-full animate-page-enter">
-                        {renderContent()}
-                    </div>
-                </main>
+                    <main className="flex-1 overflow-y-auto overflow-x-hidden relative">
+                        <div key={currentView} className="h-full animate-page-enter">
+                            {renderContent()}
+                        </div>
+                    </main>
+                </div>
             </div>
-        </div>
+        );
+    };
+
+    return (
+        <>
+            <CustomCursor />
+            {renderPhase()}
+        </>
     );
 };
 
@@ -267,9 +271,11 @@ const App = () => {
         <ThemeProvider>
             <AuthProvider>
                 <SubscriptionProvider>
-                    <LearnLoopProvider>
-                        <AuthGate />
-                    </LearnLoopProvider>
+                    <PerformanceProvider>
+                        <LearnLoopProvider>
+                            <AuthGate />
+                        </LearnLoopProvider>
+                    </PerformanceProvider>
                 </SubscriptionProvider>
             </AuthProvider>
         </ThemeProvider>

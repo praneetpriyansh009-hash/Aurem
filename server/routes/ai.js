@@ -17,11 +17,11 @@ const router = express.Router();
 // --- Configuration ---
 const GROQ_API_KEY = (process.env.GROQ_API_KEY || "").trim();
 const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || "").trim();
-const GROQ_MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
-const GROQ_VISION_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"; // Free multimodal model on Groq
+const GROQ_MODELS = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"];
+const GROQ_VISION_MODEL = "llama-3.2-11b-vision-preview"; // Stable vision model on Groq
 const REQUEST_TIMEOUT = 30000;
 
-console.log(`[AI Service] VERSION 8.2 (MODEL UPDATE) ACTIVE`);
+console.log(`[AI Service] VERSION 9.0 (STABILITY UPDATE) ACTIVE`);
 
 // ... (keep existing code)
 
@@ -30,9 +30,7 @@ console.log(`[AI Service] VERSION 8.2 (MODEL UPDATE) ACTIVE`);
 const callGroqVision = async (messages) => {
     if (!GROQ_API_KEY) throw new Error("Missing Groq API Key");
 
-    // Attempting the most likely valid model ID. 
-    // If 'preview' is dead, we try 'instruct' which is the standard GA suffix.
-    const model = "meta-llama/llama-4-scout-17b-16e-instruct";
+    const model = GROQ_VISION_MODEL;
 
     console.log(`[AI] Attempting Groq Vision with model: ${model}`);
 
@@ -55,16 +53,7 @@ const callGroqVision = async (messages) => {
         if (!response.ok) {
             const errorText = await response.text();
             console.error(`[AI] Groq Vision REST Error ${response.status}:`, errorText);
-
-            // GRACEFUL FAILURE: Do not crash the app. Return a polite message.
-            return {
-                choices: [{
-                    message: {
-                        role: 'assistant',
-                        content: "I'm sorry, I cannot analyze images right now because the specific AI vision model is currently unavailable on the server. Please try asking me questions via text!"
-                    }
-                }]
-            };
+            throw new Error(`Vision Service Unavailable: ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -76,39 +65,51 @@ const callGroqVision = async (messages) => {
 };
 
 // --- Helper: Standard Groq Text Call ---
-const callGroqStealth = async (messages) => {
-    if (!GROQ_API_KEY) throw new Error("Missing Groq API Key");
-    const model = "llama-3.3-70b-versatile";
-
-    console.log(`[Groq] Sending text request to ${model}`);
-
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Authorization": `Bearer ${GROQ_API_KEY}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            model: model,
-            messages: messages,
-            temperature: 0.7,
-            max_tokens: 4096
-        })
-    });
-
-    if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`Groq API Error (${response.status}): ${err}`);
+const callGroqStealth = async (messages, requestedModel = null) => {
+    if (!GROQ_API_KEY) {
+        throw new Error("Missing Groq API Key");
     }
+    const model = requestedModel || "llama-3.3-70b-versatile";
 
-    return await response.json();
+    try {
+        console.log(`[Groq] Sending text request to ${model}`);
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${GROQ_API_KEY}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: messages,
+                temperature: 0.7,
+                max_tokens: 4096
+            })
+        });
+
+        if (!response.ok) {
+            const err = await response.text();
+            console.error(`[Groq] Service Error (${response.status}):`, err);
+
+            // If we hit a hard Rate Limit (429) on the 70B model, try to fallback to the 8B model 
+            // since it has a separate token-per-day pool on the free tier.
+            if (response.status === 429 && model.includes('70b')) {
+                console.warn("[Groq] Daily Limit hit on 70B model. Falling back to 8B instant model...");
+                return await callGroqStealth(messages, "llama-3.1-8b-instant");
+            }
+
+            throw new Error(`Groq Service Error: ${err}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error("[Groq] Network Error:", error.message);
+        throw error;
+    }
 };
 
-// Remove Gemini Routes/Helpers completely
-
 // --- Route: Podcast ---
-// --- Route: Podcast ---
-router.post('/podcast', async (req, res) => {
+router.post('/podcast', verifyToken, async (req, res) => {
     const { content, topics, mode, syllabus, tier, images } = req.body;
     try {
         let topicContent;
@@ -194,8 +195,8 @@ Begin with energy and immediately dive into the first concept.`;
 
         let result;
         try {
-            // Direct call
-            result = await callGroqStealth(msgs);
+            // Direct call with dynamic model support
+            result = await callGroqStealth(msgs, req.body.model);
         } catch (apiError) {
             console.error("[Podcast] API Failed:", apiError.message);
             // Fallback to a simple static script so the UI doesn't break
@@ -217,13 +218,27 @@ Begin with energy and immediately dive into the first concept.`;
 
         const text = result.choices[0].message.content;
         const cleanedText = text.replace(/```json|```/g, '').trim();
-        let finalJson;
+        let finalJson = { script: [] };
         try {
             finalJson = JSON.parse(cleanedText);
         } catch (e) {
-            const match = cleanedText.match(/\[\s*\{.*\}\s*\]/s);
-            if (match) finalJson = { script: JSON.parse(match[0]) };
-            else finalJson = { script: [{ speaker: "Sam", text: text }] };
+            console.warn("[Podcast] JSON Parse failed, attempting robust regex extraction...");
+            // Robust fallback for truncated or broken JSON
+            const regex = /"speaker"\s*:\s*"([^"]+)"\s*,\s*"text"\s*:\s*"((?:\\"|[^"])+)"/g;
+            let match;
+            const extractedScript = [];
+            while ((match = regex.exec(cleanedText)) !== null) {
+                extractedScript.push({
+                    speaker: match[1],
+                    text: match[2].replace(/\\"/g, '"')
+                });
+            }
+
+            if (extractedScript.length > 0) {
+                finalJson.script = extractedScript;
+            } else {
+                finalJson.script = [{ speaker: "Sam", text: "I'm sorry, my response was interrupted. Here is what I started to say: " + cleanedText.substring(0, 300) + "..." }];
+            }
         }
 
         // NORMALIZE: Ensure we extract the ARRAY, no matter the structure
@@ -252,7 +267,7 @@ Begin with energy and immediately dive into the first concept.`;
 });
 
 // --- Route: Groq (Chat) ---
-router.post('/groq', validateAIRequest, async (req, res) => {
+router.post('/groq', verifyToken, validateAIRequest, async (req, res) => {
     try {
         const { messages } = req.body;
 
@@ -264,7 +279,6 @@ router.post('/groq', validateAIRequest, async (req, res) => {
         if (hasImages) {
             result = await callGroqVision(messages);
         } else {
-            // Text Mode - Standardize formatting
             const textMessages = messages.map(msg => ({
                 ...msg,
                 content: Array.isArray(msg.content)
@@ -272,7 +286,7 @@ router.post('/groq', validateAIRequest, async (req, res) => {
                     : msg.content
             }));
 
-            result = await callGroqStealth(textMessages);
+            result = await callGroqStealth(textMessages, req.body.model);
         }
 
         res.json(result);
@@ -299,7 +313,7 @@ router.post('/youtube-transcript', async (req, res) => {
 });
 
 // --- Route: Generate Sample Paper (Groq Vision) ---
-router.post('/generate-paper', async (req, res) => {
+router.post('/generate-paper', verifyToken, async (req, res) => {
     try {
         const { extractedText, images } = req.body;
 
@@ -398,7 +412,7 @@ CRITICAL RULES:
 });
 
 // --- Route: Evaluate Paper ---
-router.post('/evaluate-paper', async (req, res) => {
+router.post('/evaluate-paper', verifyToken, async (req, res) => {
     try {
         const { userAnswers, questions } = req.body; // userAnswers: { q1: "answer", ... }
 

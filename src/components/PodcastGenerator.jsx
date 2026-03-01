@@ -12,9 +12,8 @@ import { PODCAST_API_URL, useRetryableFetch } from '../utils/api';
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs';
 
-// Kokoro TTS will be lazily loaded on first play
-let kokoroTTS = null;
-let kokoroVoices = {};
+// Kokoro is removed for performance reasons. 
+// Using native Web Speech API Synthesis.
 
 const PodcastGenerator = () => {
     const { isDark } = useTheme();
@@ -338,129 +337,10 @@ const PodcastGenerator = () => {
         }
     };
 
-    // Generate and play audio for a line using Kokoro
+    // Generate and play audio for a line using Browser TTS (Removed slow Kokoro)
     const speakLine = async (index) => {
-        // Stop any current audio
-        if (audioRef.current) {
-            audioRef.current.pause();
-            audioRef.current = null;
-        }
-
-        if (index >= podcastScript.length) {
-            setIsPlaybackFinished(true);
-            setIsPlaying(false);
-            return;
-        }
-
-        // Set current line immediately for UI
-        setCurrentLineIndex(index);
-        setIsLoadingAudio(true);
-
-        try {
-            const line = podcastScript[index];
-
-            // Try Kokoro first
-            if (!kokoroTTS) {
-                const initialized = await initKokoro();
-                if (!initialized) {
-                    // Fallback to browser speech
-                    await speakLineWithBrowserTTS(index);
-                    return;
-                }
-            }
-
-            // === HUMANIZE TEXT FOR NATURAL SPEECH ===
-            // Add natural pauses and rhythm to make speech less robotic
-            const humanizeText = (text) => {
-                return text
-                    // Handle interruptions (--) with a pause
-                    .replace(/--/g, '... ')
-                    // Add slight pause after commas (natural breathing)
-                    .replace(/,\s*/g, ', ')
-                    // Soften hard punctuation for flow
-                    .replace(/\.\.\./g, '... ')
-                    // Ensure proper spacing
-                    .replace(/\s+/g, ' ')
-                    .trim();
-            };
-
-            const processedText = humanizeText(line.text);
-
-            // Generate audio with Kokoro
-            const voice = line.speaker === 'Alex' ? kokoroVoices.alex : kokoroVoices.sam;
-            console.log(`[Kokoro] Generating audio for ${line.speaker} using voice: ${voice}`);
-
-            // Generate with speed parameter for natural variation
-            // Add slight randomness to speed to avoid monotonic delivery
-            const baseSpeed = line.speaker === 'Alex' ? 1.0 : 0.98;
-            const randomVar = (Math.random() * 0.1) - 0.05; // +/- 0.05
-            const speed = baseSpeed + randomVar;
-            const audio = await kokoroTTS.generate(processedText, {
-                voice,
-                speed // Kokoro speed parameter
-            });
-
-            // Convert to playable audio
-            if (!audioContextRef.current) {
-                audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-            }
-
-            // Get audio data and create a blob URL
-            const wavBlob = new Blob([audio.toWav()], { type: 'audio/wav' });
-            const audioUrl = URL.createObjectURL(wavBlob);
-
-            // Create and play audio element
-            audioRef.current = new Audio(audioUrl);
-
-            // === HUMAN-LIKE PLAYBACK SETTINGS ===
-            // Slightly slower playback for conversational feel (not robotic fast)
-            let playbackRate = line.speaker === 'Alex' ? 0.95 : 0.92;
-
-            // Fallback: If we couldn't find distinct voices, use pitch/speed to simulate difference
-            if (kokoroVoices.needsPitchShift) {
-                if (line.speaker === 'Alex') {
-                    playbackRate = 0.9; // Deeper/Slower for "Male" simulation
-                } else {
-                    playbackRate = 1.1; // Higher/Faster for "Female" simulation
-                }
-            }
-
-            audioRef.current.playbackRate = playbackRate;
-
-            audioRef.current.onended = () => {
-                setIsLoadingAudio(false);
-                URL.revokeObjectURL(audioUrl); // Clean up blob URL
-                if (isPlayingRef.current) {
-                    // Add tiny delay between speakers for natural turn-taking feel
-                    setTimeout(() => {
-                        if (isPlayingRef.current) {
-                            speakLine(index + 1);
-                        }
-                    }, 300); // 300ms pause between lines - like real conversation
-                }
-            };
-
-            audioRef.current.onerror = (e) => {
-                console.error('[Kokoro] Playback error:', e);
-                setIsLoadingAudio(false);
-                URL.revokeObjectURL(audioUrl);
-                // Try next line anyway
-                if (isPlayingRef.current) {
-                    speakLine(index + 1);
-                }
-            };
-
-            audioRef.current.oncanplaythrough = () => {
-                setIsLoadingAudio(false);
-            };
-
-            await audioRef.current.play();
-
-        } catch (error) {
-            console.error('[Kokoro] TTS Error:', error);
-            // Fallback to browser speech synthesis
-            await speakLineWithBrowserTTS(index);
-        }
+        // Simply route to browser TTS for instantaneous playback
+        return speakLineWithBrowserTTS(index);
     };
 
     // Fallback: Browser SpeechSynthesis
@@ -575,331 +455,340 @@ const PodcastGenerator = () => {
 
 
     return (
-        <div className={`h-full ${isDark ? 'bg-midnight-900 text-white' : 'bg-warm-50 text-warm-800'} font-sans transition-colors duration-300 overflow-y-auto custom-scrollbar`}>
+        <div className={`h-full bg-theme-bg text-theme-text font-sans transition-colors duration-300 overflow-y-auto custom-scrollbar`}>
 
             {/* Header */}
-            <div className={`px-6 py-5 flex items-center justify-between z-30 glass-3d border-b rounded-b-3xl mx-4 mt-4
-                ${isDark ? 'bg-midnight-900/40 border-white/[0.08]' : 'bg-white/40 border-warm-200/50'}
+            <div className={`px-6 py-5 flex items-center justify-between z-30 glass-3d-elevated border-b rounded-b-3xl mx-4 mt-4
+                bg-theme-surface border-theme-border shadow-md
             `}>
-                <div className="flex items-center gap-4 group">
-                    <div className={`p-3 rounded-2xl bg-gradient-to-br from-rose-500 to-orange-600 shadow-xl shadow-rose-500/20 group-hover:scale-110 transition-transform duration-500`}>
-                        <Radio className="w-6 h-6 text-white animate-pulse" />
+                <div className="flex items-center gap-4 group cursor-default">
+                    <div className={`p-3 rounded-2xl bg-theme-bg shadow-xl shadow-[var(--theme-primary)]/20 border border-theme-border group-hover:scale-110 group-hover:-rotate-6 transition-all duration-500`}>
+                        <Radio className="w-6 h-6 text-theme-primary animate-pulse" />
                     </div>
                     <div>
                         <div className="flex items-center gap-3">
-                            <h1 className="text-xl font-black bg-gradient-to-r from-rose-500 to-orange-500 bg-clip-text text-transparent uppercase tracking-tight">
-                                Broadcast Studio
+                            <h1 className="text-xl font-black bg-gradient-to-r from-theme-primary to-theme-secondary bg-clip-text text-transparent uppercase tracking-tightest">
+                                Audio Studio
                             </h1>
-                            <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 text-[10px] font-black uppercase tracking-widest border border-orange-500/30">Under Development (Beta Version)</span>
+                            <span className="px-2 py-0.5 rounded-full bg-theme-primary/10 text-theme-primary text-[10px] font-black uppercase tracking-widest border border-theme-primary/20 shadow-[0_0_10px_var(--theme-primary)]">Neural Core v3.0</span>
                         </div>
-                        <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mt-0.5">Autonomous Audio Synthesis</p>
+                        <p className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em] mt-0.5">High-Fidelity Audio Generation</p>
                     </div>
                 </div>
             </div>
 
-            <div className="max-w-5xl mx-auto px-6 pb-16 grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="relative">
+                {/* UNDER DEVELOPMENT OVERLAY */}
+                <div className="absolute inset-x-0 inset-y-[-20px] z-50 bg-theme-bg/60 backdrop-blur-sm flex flex-col items-center justify-center border-t border-theme-border">
+                    <span className="text-xs font-bold uppercase tracking-[0.2em] px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-500 border border-amber-500/30 mb-3 shadow-[0_0_30px_rgba(245,158,11,0.2)]">
+                        Under Development
+                    </span>
+                    <h3 className="text-xl font-serif italic text-theme-text">Audio Generation Paused</h3>
+                    <p className="text-sm text-theme-muted mt-2 max-w-sm text-center">We are currently migrating to a new TTS engine. Please check back later.</p>
+                </div>
 
-                {/* Left Sidebar: Controls & Input */}
-                <div className="lg:col-span-4 space-y-6 animate-enter opacity-0 delay-100 fill-mode-forwards" style={{ animationFillMode: 'forwards' }}>
+                <div className="max-w-6xl mx-auto px-6 pb-16 grid grid-cols-1 lg:grid-cols-12 gap-10 mt-8 opacity-30 pointer-events-none">
 
-                    {/* Mode Selection Tabs */}
-                    <div className="flex gap-2 p-1 rounded-2xl bg-gray-200/50 dark:bg-gray-800/50 backdrop-blur-sm">
-                        <button
-                            onClick={() => setActiveMode('upload')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all duration-300
+                    {/* Left Sidebar: Controls & Input */}
+                    <div className="lg:col-span-4 space-y-6 animate-enter opacity-0 delay-100 fill-mode-forwards" style={{ animationFillMode: 'forwards' }}>
+
+                        {/* Mode Selection Tabs */}
+                        <div className="flex gap-2 p-1 rounded-2xl bg-theme-surface border border-theme-border backdrop-blur-sm">
+                            <button
+                                onClick={() => setActiveMode('upload')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all duration-300
                                 ${activeMode === 'upload'
-                                    ? 'bg-rose-500 text-white shadow-lg shadow-rose-500/20 scale-[1.02]'
-                                    : 'text-gray-500 hover:bg-white/10'}
+                                        ? 'bg-theme-primary text-theme-bg shadow-[0_0_15px_var(--theme-primary)] scale-[1.02]'
+                                        : 'text-theme-muted hover:bg-theme-bg'}
                             `}
-                        >
-                            <Upload className="w-4 h-4" /> Personal
-                        </button>
-                        <button
-                            onClick={() => setActiveMode('syllabus')}
-                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all duration-300
+                            >
+                                <Upload className="w-4 h-4" /> Personal
+                            </button>
+                            <button
+                                onClick={() => setActiveMode('syllabus')}
+                                className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all duration-300
                                 ${activeMode === 'syllabus'
-                                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20 scale-[1.02]'
-                                    : 'text-gray-500 hover:bg-white/10'}
+                                        ? 'bg-theme-primary text-theme-bg shadow-[0_0_15px_var(--theme-primary)] scale-[1.02]'
+                                        : 'text-theme-muted hover:bg-theme-bg'}
                             `}
-                        >
-                            <Sparkles className="w-4 h-4" /> Syllabus
-                        </button>
-                    </div>
-
-                    {/* Tier Info */}
-                    <div className={`p-4 rounded-3xl border flex items-center justify-between ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
-                        <div className="flex items-center gap-2">
-                            {isPro ? (
-                                <>
-                                    <Crown className="w-4 h-4 text-amber-500" />
-                                    <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">PRO • 15 min podcasts</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">BASIC • 7 min podcasts</span>
-                                    <span className="text-[10px] text-rose-500 font-bold">({getRemainingUses('podcast')} left today)</span>
-                                </>
-                            )}
+                            >
+                                <Sparkles className="w-4 h-4" /> Syllabus
+                            </button>
                         </div>
-                    </div>
 
-                    {activeMode === 'upload' ? (
-                        <>
-                            {/* Upload Section */}
-                            <div className={`p-6 rounded-3xl border ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-                                <h3 className="text-xs font-bold text-rose-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Upload className="w-4 h-4" /> Source Document
-                                </h3>
-
-                                <div
-                                    onClick={() => fileInputRef.current?.click()}
-                                    onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-                                    onDragLeave={() => setIsDragging(false)}
-                                    onDrop={e => { e.preventDefault(); setIsDragging(false); processFile(e.dataTransfer.files?.[0]); }}
-                                    className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-300
-                                        ${isDragging ? 'border-rose-500 bg-rose-500/10' : isDark ? 'border-gray-800 bg-black/20 hover:border-gray-700' : 'border-gray-300 bg-gray-50 hover:border-rose-400'}
-                                    `}
-                                >
-                                    <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md" onChange={e => processFile(e.target.files?.[0])} className="hidden" />
-                                    {fileName ? (
-                                        <div>
-                                            <FilePlus className="w-8 h-8 mx-auto mb-2 text-rose-500" />
-                                            <p className="text-sm font-bold truncate px-2">{fileName}</p>
-                                            <p className="text-[10px] text-gray-500 mt-1">Click to change</p>
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            <Upload className={`w-8 h-8 mx-auto mb-2 ${isPdfLoading ? 'text-rose-500 animate-bounce' : 'text-gray-400'}`} />
-                                            <p className="text-sm font-bold text-gray-400">{isPdfLoading ? 'Reading...' : 'Drop PDF or Text'}</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Topics Section */}
-                            <div className={`p-6 rounded-3xl border ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-                                <h3 className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                    <Layers className="w-4 h-4" /> Focal Points
-                                </h3>
-                                <textarea
-                                    value={topics}
-                                    onChange={e => setTopics(e.target.value)}
-                                    placeholder="e.g., Focus on the methodology, or make it more humorous..."
-                                    className={`w-full h-24 p-4 text-xs rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all
-                                        ${isDark ? 'bg-black/40 text-gray-300 placeholder-gray-600' : 'bg-gray-50 text-gray-700 placeholder-gray-400'}
-                                    `}
-                                />
-                            </div>
-                        </>
-                    ) : (
-                        <div className={`p-6 rounded-3xl border space-y-4 ${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200 shadow-sm'}`}>
-                            <h3 className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                <Sparkles className="w-4 h-4" /> Syllabus Details
-                            </h3>
-
-                            <div>
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2 block">Subject</label>
-                                <input
-                                    type="text"
-                                    value={syllabus.subject}
-                                    onChange={e => setSyllabus({ ...syllabus, subject: e.target.value })}
-                                    placeholder="e.g., Biology, Economics..."
-                                    className={`w-full p-4 rounded-xl text-xs focus:ring-2 focus:ring-orange-500 outline-none transition-all
-                                        ${isDark ? 'bg-black/40 text-white' : 'bg-gray-50 text-gray-900 border border-gray-100'}
-                                    `}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2 block">Topic Name</label>
-                                <input
-                                    type="text"
-                                    value={syllabus.topic}
-                                    onChange={e => setSyllabus({ ...syllabus, topic: e.target.value })}
-                                    placeholder="e.g., Mitochondrial DNA, Inflation..."
-                                    className={`w-full p-4 rounded-xl text-xs focus:ring-2 focus:ring-orange-500 outline-none transition-all
-                                        ${isDark ? 'bg-black/40 text-white' : 'bg-gray-50 text-gray-900 border border-gray-100'}
-                                    `}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2 block">Education Level</label>
-                                <select
-                                    value={syllabus.level}
-                                    onChange={e => setSyllabus({ ...syllabus, level: e.target.value })}
-                                    className={`w-full p-4 rounded-xl text-xs focus:ring-2 focus:ring-orange-500 outline-none transition-all appearance-none
-                                        ${isDark ? 'bg-black/40 text-white' : 'bg-gray-50 text-gray-900 border border-gray-100'}
-                                    `}
-                                >
-                                    <option>High School</option>
-                                    <option>University</option>
-                                    <option>Post Graduate</option>
-                                    <option>Expert/Professional</option>
-                                </select>
+                        {/* Tier Info */}
+                        <div className={`p-4 rounded-3xl border flex items-center justify-between bg-theme-surface border-theme-border`}>
+                            <div className="flex items-center gap-2">
+                                {isPro ? (
+                                    <>
+                                        <Crown className="w-4 h-4 text-theme-primary" />
+                                        <span className="text-[10px] font-black text-theme-primary uppercase tracking-widest">PRO • 15 min podcasts</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest">BASIC • 7 min podcasts</span>
+                                        <span className="text-[10px] text-theme-primary font-bold">({getRemainingUses('podcast')} left today)</span>
+                                    </>
+                                )}
                             </div>
                         </div>
-                    )}
 
-                    {/* Generate Button */}
-                    <button
-                        onClick={handleGeneratePodcast}
-                        disabled={isGenerating || (activeMode === 'upload' ? !documentContent : (!syllabus.topic || !syllabus.subject))}
-                        className={`w-full py-5 rounded-3xl font-black text-sm uppercase tracking-widest transition-all duration-500 flex items-center justify-center gap-3 group
-                            ${isGenerating || (activeMode === 'upload' ? !documentContent : (!syllabus.topic || !syllabus.subject))
-                                ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
-                                : activeMode === 'upload'
-                                    ? 'bg-gradient-to-r from-rose-500 to-orange-500 text-white shadow-lg shadow-rose-500/25 hover:scale-[1.02]'
-                                    : 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/25 hover:scale-[1.02]'}
-                        `}
-                    >
-                        {isGenerating ? (
+                        {activeMode === 'upload' ? (
                             <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                Scripting Podcast...
+                                {/* Upload Section */}
+                                <div className={`p-6 rounded-3xl border bg-theme-surface border-theme-border shadow-sm`}>
+                                    <h3 className="text-xs font-bold text-theme-primary uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <Upload className="w-4 h-4" /> Source Document
+                                    </h3>
+
+                                    <div
+                                        onClick={() => fileInputRef.current?.click()}
+                                        onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+                                        onDragLeave={() => setIsDragging(false)}
+                                        onDrop={e => { e.preventDefault(); setIsDragging(false); processFile(e.dataTransfer.files?.[0]); }}
+                                        className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-300
+                                        ${isDragging ? 'border-theme-primary bg-theme-primary/10' : 'border-theme-border bg-theme-bg hover:border-theme-primary'}
+                                    `}
+                                    >
+                                        <input ref={fileInputRef} type="file" accept=".pdf,.txt,.md" onChange={e => processFile(e.target.files?.[0])} className="hidden" />
+                                        {fileName ? (
+                                            <div>
+                                                <FilePlus className="w-8 h-8 mx-auto mb-2 text-theme-primary" />
+                                                <p className="text-sm font-bold truncate px-2 text-theme-text">{fileName}</p>
+                                                <p className="text-[10px] text-theme-muted mt-1">Click to change</p>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <Upload className={`w-8 h-8 mx-auto mb-2 ${isPdfLoading ? 'text-theme-primary animate-bounce' : 'text-theme-muted'}`} />
+                                                <p className="text-sm font-bold text-theme-muted">{isPdfLoading ? 'Reading...' : 'Drop PDF or Text'}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Topics Section */}
+                                <div className={`p-6 rounded-3xl border bg-theme-surface border-theme-border shadow-sm`}>
+                                    <h3 className="text-xs font-bold text-theme-primary uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <Layers className="w-4 h-4" /> Focal Points
+                                    </h3>
+                                    <textarea
+                                        value={topics}
+                                        onChange={e => setTopics(e.target.value)}
+                                        placeholder="e.g., Focus on the methodology, or make it more humorous..."
+                                        className={`w-full h-24 p-4 text-xs rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-theme-primary transition-all
+                                        bg-theme-bg text-theme-text placeholder-theme-muted border border-theme-border
+                                    `}
+                                    />
+                                </div>
                             </>
                         ) : (
-                            <>
-                                <Mic className="w-5 h-5 group-hover:animate-bounce" />
-                                Generate Podcast
-                            </>
-                        )}
-                    </button>
+                            <div className={`p-6 rounded-3xl border space-y-4 bg-theme-surface border-theme-border shadow-sm`}>
+                                <h3 className="text-xs font-bold text-theme-primary uppercase tracking-widest mb-2 flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4" /> Syllabus Details
+                                </h3>
 
-                </div>
-
-                {/* Right: Studio Player & Transcript */}
-                <div className="lg:col-span-8 animate-enter opacity-0 delay-200 fill-mode-forwards" style={{ animationFillMode: 'forwards' }}>
-
-                    {/* Player UI */}
-                    <div className={`p-10 rounded-[48px] glass-3d glow-border relative overflow-hidden transition-all duration-500
-                        ${isDark ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-white/90 border-warm-200/50 shadow-2xl'}
-                    `}>
-                        <div className="absolute top-0 right-0 w-full h-1 bg-gradient-to-r from-rose-500 via-orange-500 to-rose-500 animate-pulse" />
-
-                        {/* Status Bar */}
-                        <div className="flex items-center justify-between mb-10">
-                            <div className="flex items-center gap-6">
-                                <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-lg transition-all duration-500
-                                    ${isPlaying
-                                        ? 'bg-gradient-to-r from-rose-500 to-rose-600 text-white animate-pulse shadow-rose-500/30'
-                                        : 'bg-gray-800 text-gray-500 border border-white/5'}
-                                `}>
-                                    {isPlaying ? 'System Transmitting' : 'Buffer Standby'}
-                                </div>
-                                <div className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em]">
-                                    {podcastScript.length > 0 ? `${podcastScript.length} Neural Segments` : 'Empty Buffer'}
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                {isLoadingAudio && <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />}
-                                <div className="flex items-center gap-2 group cursor-pointer">
-                                    <span className={`w-3 h-3 rounded-full transition-all duration-300 ${isPlaying ? 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.8)] scale-110' : 'bg-gray-600'}`}></span>
-                                    <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest group-hover:text-rose-500 transition-colors">LIVE FEED</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Script / Transcript — Split-Screen Dual Speaker */}
-                        <div className={`h-[400px] mb-8 transition-opacity duration-500 ${isGenerating ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
-                            {podcastScript.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-center px-12">
-                                    <div className={`p-6 rounded-full mb-6 ${isDark ? 'bg-gray-800' : 'bg-gray-100'}`}>
-                                        <Mic className="w-12 h-12 text-gray-400" />
-                                    </div>
-                                    <h4 className="text-xl font-bold mb-2">Ready for Recording</h4>
-                                    <p className="text-sm text-gray-500">Upload a resource and generate a script to start your AI-hosted deep dive.</p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-2 gap-3 h-full">
-                                    {/* Alex Panel */}
-                                    <div className={`rounded-2xl border overflow-hidden flex flex-col ${isDark ? 'bg-rose-950/20 border-rose-900/30' : 'bg-rose-50/50 border-rose-100'}`}>
-                                        <div className={`px-4 py-3 border-b flex items-center gap-3 shrink-0 ${isDark ? 'border-rose-900/30 bg-rose-950/40' : 'border-rose-100 bg-rose-50'}`}>
-                                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-500/20">
-                                                <User className="w-4 h-4" />
-                                            </div>
-                                            <span className="text-[11px] font-black uppercase tracking-widest">Alex</span>
-                                            <span className="text-[9px] bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-300 px-1.5 py-0.5 rounded">HOST</span>
-                                        </div>
-                                        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-                                            {podcastScript.map((line, idx) => line.speaker === 'Alex' && (
-                                                <div key={idx} className={`p-3 rounded-xl text-xs leading-relaxed transition-all duration-400 ${currentLineIndex === idx ? (isDark ? 'bg-rose-500/15 border border-rose-500/40 text-white font-medium' : 'bg-rose-100 border border-rose-300 text-gray-950 font-medium shadow-sm') : 'opacity-70'}`}>
-                                                    {line.text}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    {/* Sam Panel */}
-                                    <div className={`rounded-2xl border overflow-hidden flex flex-col ${isDark ? 'bg-amber-950/20 border-amber-900/30' : 'bg-orange-50/50 border-orange-100'}`}>
-                                        <div className={`px-4 py-3 border-b flex items-center gap-3 shrink-0 ${isDark ? 'border-amber-900/30 bg-amber-950/40' : 'border-orange-100 bg-orange-50'}`}>
-                                            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-400 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
-                                                <Sparkles className="w-4 h-4" />
-                                            </div>
-                                            <span className="text-[11px] font-black uppercase tracking-widest">Sam</span>
-                                            <span className="text-[9px] bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-300 px-1.5 py-0.5 rounded">EXPERT</span>
-                                        </div>
-                                        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-                                            {podcastScript.map((line, idx) => line.speaker === 'Sam' && (
-                                                <div key={idx} className={`p-3 rounded-xl text-xs leading-relaxed transition-all duration-400 ${currentLineIndex === idx ? (isDark ? 'bg-orange-500/15 border border-orange-500/40 text-white font-medium' : 'bg-orange-100 border border-orange-300 text-gray-950 font-medium shadow-sm') : 'opacity-70'}`}>
-                                                    {line.text}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Controls Bar */}
-                        <div className={`p-6 rounded-3xl border flex items-center justify-between ${isDark ? 'bg-black/40 border-gray-800' : 'bg-gray-50 border-gray-100'}`}>
-                            <div className="flex items-center gap-6">
-                                <button
-                                    onClick={stopPlayback}
-                                    className="p-3 rounded-full hover:bg-gray-500/10 text-gray-500 transition-colors"
-                                    title="Reset"
-                                >
-                                    <SkipBack className="w-5 h-5 fill-current" />
-                                </button>
-
-                                <button
-                                    onClick={togglePlayback}
-                                    disabled={podcastScript.length === 0}
-                                    className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl
-                                        ${podcastScript.length === 0
-                                            ? 'bg-gray-800 text-gray-600'
-                                            : 'bg-rose-500 text-white hover:scale-110 active:scale-95 shadow-rose-500/40'}
+                                <div>
+                                    <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mb-2 block">Subject</label>
+                                    <input
+                                        type="text"
+                                        value={syllabus.subject}
+                                        onChange={e => setSyllabus({ ...syllabus, subject: e.target.value })}
+                                        placeholder="e.g., Biology, Economics..."
+                                        className={`w-full p-4 rounded-xl text-xs focus:ring-2 focus:ring-theme-primary outline-none transition-all
+                                        bg-theme-bg text-theme-text border border-theme-border
                                     `}
-                                >
-                                    {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
-                                </button>
-                            </div>
+                                    />
+                                </div>
 
-                            {/* Waveform Visualization (Mock) */}
-                            <div className="hidden md:flex flex-1 mx-12 items-center gap-[3px] h-8">
-                                {[...Array(30)].map((_, i) => (
-                                    <div
-                                        key={i}
-                                        className={`w-[3px] rounded-full transition-all duration-300 ${isPlaying ? 'bg-rose-500/60' : 'bg-gray-700'}`}
-                                        style={{
-                                            height: isPlaying ? `${Math.random() * 100}%` : '4px',
-                                            animation: isPlaying ? `wave 1s ease-in-out infinite ${i * 0.05}s` : 'none'
-                                        }}
-                                    ></div>
-                                ))}
-                            </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mb-2 block">Topic Name</label>
+                                    <input
+                                        type="text"
+                                        value={syllabus.topic}
+                                        onChange={e => setSyllabus({ ...syllabus, topic: e.target.value })}
+                                        placeholder="e.g., Mitochondrial DNA, Inflation..."
+                                        className={`w-full p-4 rounded-xl text-xs focus:ring-2 focus:ring-theme-primary outline-none transition-all
+                                        bg-theme-bg text-theme-text border border-theme-border
+                                    `}
+                                    />
+                                </div>
 
-                            <div className="flex items-center gap-3">
-                                <Volume2 className="w-5 h-5 text-gray-500" />
-                                <div className={`w-20 h-1 rounded-full ${isDark ? 'bg-gray-800' : 'bg-gray-200'}`}>
-                                    <div className="w-3/4 h-full rounded-full bg-rose-500"></div>
+                                <div>
+                                    <label className="text-[10px] font-black text-theme-muted uppercase tracking-[0.2em] mb-2 block">Education Level</label>
+                                    <select
+                                        value={syllabus.level}
+                                        onChange={e => setSyllabus({ ...syllabus, level: e.target.value })}
+                                        className={`w-full p-4 rounded-xl text-xs focus:ring-2 focus:ring-theme-primary outline-none transition-all appearance-none
+                                        bg-theme-bg text-theme-text border border-theme-border
+                                    `}
+                                    >
+                                        <option>High School</option>
+                                        <option>University</option>
+                                        <option>Post Graduate</option>
+                                        <option>Expert/Professional</option>
+                                    </select>
                                 </div>
                             </div>
-                        </div>
+                        )}
+
+                        {/* Generate Button */}
+                        <button
+                            onClick={handleGeneratePodcast}
+                            disabled={isGenerating || (activeMode === 'upload' ? !documentContent : (!syllabus.topic || !syllabus.subject))}
+                            className={`w-full py-5 rounded-3xl font-black text-sm uppercase tracking-widest transition-all duration-500 flex items-center justify-center gap-3 group
+                            ${isGenerating || (activeMode === 'upload' ? !documentContent : (!syllabus.topic || !syllabus.subject))
+                                    ? 'bg-theme-surface border border-theme-border text-theme-muted cursor-not-allowed opacity-50'
+                                    : 'bg-theme-primary text-theme-bg shadow-[0_0_20px_var(--theme-primary)] hover:scale-[1.02] opacity-90 hover:opacity-100'}
+                        `}
+                        >
+                            {isGenerating ? (
+                                <>
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                    Scripting Podcast...
+                                </>
+                            ) : (
+                                <>
+                                    <Mic className="w-5 h-5 group-hover:animate-bounce" />
+                                    Generate Podcast
+                                </>
+                            )}
+                        </button>
 
                     </div>
-                </div>
 
-            </div >
+                    {/* Right: Studio Player & Transcript */}
+                    <div className="lg:col-span-8 animate-enter opacity-0 delay-200 fill-mode-forwards" style={{ animationFillMode: 'forwards' }}>
+
+                        {/* Player UI */}
+                        <div className={`p-10 rounded-[56px] glass-3d-elevated relative overflow-hidden transition-all duration-700
+                        bg-theme-surface border border-theme-border shadow-2xl
+                    `}>
+                            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-transparent via-theme-primary to-transparent animate-pulse opacity-50" />
+
+                            {/* Status Bar */}
+                            <div className="flex items-center justify-between mb-10">
+                                <div className="flex items-center gap-6">
+                                    <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-lg transition-all duration-500
+                                    ${isPlaying
+                                            ? 'bg-gradient-to-r from-theme-primary to-theme-secondary text-theme-bg animate-pulse shadow-[0_0_15px_var(--theme-primary)]'
+                                            : 'bg-theme-bg text-theme-muted border border-theme-border'}
+                                `}>
+                                        {isPlaying ? 'System Transmitting' : 'Buffer Standby'}
+                                    </div>
+                                    <div className="text-[10px] font-black text-theme-muted uppercase tracking-[0.3em]">
+                                        {podcastScript.length > 0 ? `${podcastScript.length} Neural Segments` : 'Empty Buffer'}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    {isLoadingAudio && <Loader2 className="w-5 h-5 text-theme-primary animate-spin" />}
+                                    <div className="flex items-center gap-2 group cursor-pointer">
+                                        <span className={`w-3 h-3 rounded-full transition-all duration-300 ${isPlaying ? 'bg-theme-secondary shadow-[0_0_15px_var(--theme-secondary)] scale-110' : 'bg-theme-bg border border-theme-border'}`}></span>
+                                        <span className="text-[10px] font-black text-theme-muted uppercase tracking-widest group-hover:text-theme-primary transition-colors">LIVE FEED</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Script / Transcript — Split-Screen Dual Speaker */}
+                            <div className={`h-[400px] mb-8 transition-opacity duration-500 ${isGenerating ? 'opacity-20 pointer-events-none' : 'opacity-100'}`}>
+                                {podcastScript.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-center px-12">
+                                        <div className={`p-6 rounded-full mb-6 bg-theme-bg border border-theme-border`}>
+                                            <Mic className="w-12 h-12 text-theme-muted" />
+                                        </div>
+                                        <h4 className="text-xl font-bold mb-2 text-theme-text">Ready for Recording</h4>
+                                        <p className="text-sm text-theme-muted">Upload a resource and generate a script to start your AI-hosted deep dive.</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-3 h-full">
+                                        {/* Alex Panel */}
+                                        <div className={`rounded-2xl border overflow-hidden flex flex-col bg-theme-bg border-theme-border`}>
+                                            <div className={`px-4 py-3 border-b flex items-center gap-3 shrink-0 border-theme-border bg-theme-surface`}>
+                                                <div className="w-8 h-8 rounded-full bg-theme-primary flex items-center justify-center text-theme-bg shadow-[0_0_10px_var(--theme-primary)] opacity-90">
+                                                    <User className="w-4 h-4" />
+                                                </div>
+                                                <span className="text-[11px] font-black uppercase tracking-widest text-theme-text">Alex</span>
+                                                <span className="text-[9px] bg-theme-primary/10 text-theme-primary px-1.5 py-0.5 rounded border border-theme-primary/20">HOST</span>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+                                                {podcastScript.map((line, idx) => line.speaker === 'Alex' && (
+                                                    <div key={idx} className={`p-3 rounded-xl text-xs leading-relaxed transition-all duration-400 ${currentLineIndex === idx ? 'bg-theme-surface border border-theme-primary/40 text-theme-text font-medium shadow-[0_0_10px_var(--theme-primary)]' : 'opacity-70'}`}>
+                                                        {line.text}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        {/* Sam Panel */}
+                                        <div className={`rounded-2xl border overflow-hidden flex flex-col bg-theme-bg border-theme-border`}>
+                                            <div className={`px-4 py-3 border-b flex items-center gap-3 shrink-0 border-theme-border bg-theme-surface`}>
+                                                <div className="w-8 h-8 rounded-full bg-theme-secondary flex items-center justify-center text-theme-bg shadow-[0_0_10px_var(--theme-secondary)] opacity-90">
+                                                    <Sparkles className="w-4 h-4" />
+                                                </div>
+                                                <span className="text-[11px] font-black uppercase tracking-widest text-theme-text">Sam</span>
+                                                <span className="text-[9px] bg-theme-secondary/10 text-theme-secondary px-1.5 py-0.5 rounded border border-theme-secondary/20">EXPERT</span>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+                                                {podcastScript.map((line, idx) => line.speaker === 'Sam' && (
+                                                    <div key={idx} className={`p-3 rounded-xl text-xs leading-relaxed transition-all duration-400 ${currentLineIndex === idx ? 'bg-theme-surface border border-theme-secondary/40 text-theme-text font-medium shadow-[0_0_10px_var(--theme-secondary)]' : 'opacity-70'}`}>
+                                                        {line.text}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Controls Bar */}
+                            <div className={`p-6 rounded-3xl border flex items-center justify-between bg-theme-bg border-theme-border shadow-inner`}>
+                                <div className="flex items-center gap-6">
+                                    <button
+                                        onClick={stopPlayback}
+                                        className="p-3 rounded-full hover:bg-theme-surface border border-transparent hover:border-theme-border text-theme-muted hover:text-theme-text transition-colors"
+                                        title="Reset"
+                                    >
+                                        <SkipBack className="w-5 h-5 fill-current" />
+                                    </button>
+
+                                    <button
+                                        onClick={togglePlayback}
+                                        disabled={podcastScript.length === 0}
+                                        className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl
+                                        ${podcastScript.length === 0
+                                                ? 'bg-theme-surface border border-theme-border text-theme-muted'
+                                                : 'bg-theme-primary text-theme-bg hover:scale-110 active:scale-95 shadow-[0_0_20px_var(--theme-primary)]'}
+                                    `}
+                                    >
+                                        {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
+                                    </button>
+                                </div>
+
+                                {/* Waveform Visualization (Mock) */}
+                                <div className="hidden md:flex flex-1 mx-12 items-center gap-[3px] h-8">
+                                    {[...Array(30)].map((_, i) => (
+                                        <div
+                                            key={i}
+                                            className={`w-[3px] rounded-full transition-all duration-300 ${isPlaying ? 'bg-theme-primary/60' : 'bg-theme-border'}`}
+                                            style={{
+                                                height: isPlaying ? `${Math.random() * 100}%` : '4px',
+                                                animation: isPlaying ? `wave 1s ease-in-out infinite ${i * 0.05}s` : 'none'
+                                            }}
+                                        ></div>
+                                    ))}
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <Volume2 className="w-5 h-5 text-theme-muted" />
+                                    <div className={`w-20 h-1 rounded-full bg-theme-border`}>
+                                        <div className="w-3/4 h-full rounded-full bg-theme-primary"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                </div>
+            </div>
 
             <style jsx>{`
                 @keyframes wave {

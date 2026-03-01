@@ -8,6 +8,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
+import Redis from 'ioredis';
+import hpp from 'hpp';
+import xss from 'xss-clean';
 
 console.log('[Startup] Importing routes...');
 import authRoutes from './routes/auth.js';
@@ -28,16 +32,37 @@ const PORT = process.env.PORT || 5050; // Consolidated to port 5050
 
 // Security Middleware
 app.use(helmet()); // Set security HTTP headers
+app.use(xss()); // Prevent XSS attacks
+app.use(hpp()); // Prevent HTTP Parameter Pollution
 
-// Rate Limiting
-const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    message: { error: 'Too many requests, please try again later.' }
+// Redis Client Configuration (Graceful Fallback)
+let redisClient;
+if (process.env.REDIS_URL) {
+    redisClient = new Redis(process.env.REDIS_URL);
+    redisClient.on('error', (err) => console.warn('[Redis] Connection Error:', err.message));
+    redisClient.on('connect', () => console.log('[Redis] Connected for Rate Limiting & Caching'));
+}
+
+// Rate Limiting (Cluster aware if Redis is provided)
+const createLimiter = (maxRequests, windowMin) => rateLimit({
+    windowMs: windowMin * 60 * 1000,
+    max: maxRequests,
+    standardHeaders: true,
+    legacyHeaders: false,
+    // Gracefully fallback to memory if Redis isn't configured/fails, ensuring seamless UX
+    store: redisClient ? new RedisStore({
+        sendCommand: (...args) => redisClient.call(...args)
+    }) : undefined,
+    message: { error: 'Too many requests from this IP, please try again after a short while.' }
 });
-app.use('/api', limiter); // Apply to all API routes
+
+// Standard API Rate Limit
+app.use('/api', createLimiter(500, 15)); // 500 requests per 15 minutes for general endpoints
+
+// Stricter API Limit for AI generation endpoints to prevent bot-draining
+app.use('/api/ai/podcast', createLimiter(30, 15));
+app.use('/api/ai/groq', createLimiter(100, 15));
+app.use('/api/ai/generate-paper', createLimiter(30, 15));
 
 // CORS Configuration
 const corsOptions = {
@@ -89,8 +114,14 @@ const isLocalhostDb = MONGODB_URI?.includes('localhost') || MONGODB_URI?.include
 const shouldConnect = MONGODB_URI && (!process.env.VERCEL || !isLocalhostDb);
 
 if (shouldConnect) {
-    mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
-        .then(() => console.log('MongoDB Connected'))
+    // 1 Million User Scale:
+    // Configure massive connection pooling (100 concurrent pipes per CPU core) to prevent DB bottlenecking
+    mongoose.connect(MONGODB_URI, {
+        serverSelectionTimeoutMS: 5000,
+        maxPoolSize: 100, // Handle up to 100 concurrent connections per node cluster
+        family: 4 // Force IPv4 routing for faster DNS resolution
+    })
+        .then(() => console.log('MongoDB Connected (Pool Size: 100)'))
         .catch(err => console.error('MongoDB Connection Error:', err.message));
 } else {
     console.log('MongoDB URI missing or invalid for production. Skipping database connection.');

@@ -1,20 +1,21 @@
 import React from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
-import { Bot, FileText, LogOut, Moon, Sun, ChevronRight, ChevronLeft, GraduationCap, FilePlus, ClipboardList, Mic, Sparkles, Crown, Eye, Settings, RefreshCw, Video, Trophy } from './Icons';
+import { Bot, FileText, LogOut, Moon, Sun, ChevronRight, ChevronLeft, GraduationCap, FilePlus, ClipboardList, Mic, Sparkles, Crown, Eye, Settings, RefreshCw, Video, Trophy, Swords } from './Icons';
 
 const Sidebar = ({ currentView, setCurrentView, isSidebarOpen, setIsSidebarOpen, isCollapsed, setIsCollapsed, user, onLogin, onLogout }) => {
-    const { isDark, toggleMode } = useTheme();
+    const { isDark } = useTheme();
     const { tier, isPro, isDevMode, triggerUpgradeModal } = useSubscription();
 
     const navItems = [
-        { id: 'doubt-solver', label: 'Doubt Solver', icon: Bot, color: 'from-violet-500 to-indigo-500', glow: 'shadow-violet-500/20' },
-        { id: 'document-study', label: 'Aurem Lens', icon: Eye, color: 'from-amber-500 to-orange-500', glow: 'shadow-amber-500/20' },
-        { id: 'exam-hub', label: 'Competitive Hub', icon: Trophy, color: 'from-yellow-400 to-orange-500', glow: 'shadow-yellow-500/20' },
-        { id: 'podcast-generator', label: 'Podcast Studio', icon: Mic, color: 'from-rose-500 to-pink-500', glow: 'shadow-rose-500/20' },
-        { id: 'college-compass', label: 'College Compass', icon: GraduationCap, color: 'from-cyan-500 to-blue-500', glow: 'shadow-cyan-500/20' },
-        { id: 'quiz-assessment', label: 'Quiz & Assessment', icon: ClipboardList, color: 'from-emerald-500 to-teal-500', glow: 'shadow-emerald-500/20' },
-        { id: 'video-generator', label: 'AI Video Studio', icon: Video, color: 'from-fuchsia-500 to-purple-500', glow: 'shadow-fuchsia-500/20' },
+        { id: 'doubt-solver', label: 'Neural Query', icon: Bot },
+        { id: 'document-study', label: 'Aurem Lens', icon: Eye },
+        { id: 'neural-arena', label: 'Cognitive Colosseum', icon: Swords },
+        { id: 'exam-hub', label: 'Competitive Prep', icon: Trophy },
+        { id: 'podcast-generator', label: 'Audio Studio', icon: Mic },
+        { id: 'college-compass', label: 'Admissions Pilot', icon: GraduationCap },
+        { id: 'quiz-assessment', label: 'Adaptive Testing', icon: ClipboardList },
+        { id: 'video-generator', label: 'Visual Studio', icon: Video },
     ];
 
     return (
@@ -30,41 +31,33 @@ const Sidebar = ({ currentView, setCurrentView, isSidebarOpen, setIsSidebarOpen,
             {/* Sidebar Container */}
             <aside className={`
                 fixed md:relative z-50 h-full md:h-[96vh] md:my-[2vh] ml-0 md:ml-[2vh]
-                transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)]
+                transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] will-change-transform
                 ${isCollapsed ? 'w-[76px]' : 'w-[280px] md:w-[272px]'}
-                ${isSidebarOpen ? 'translate-x-0 left-0' : '-translate-x-full md:translate-x-0'}
+                ${isSidebarOpen ? 'translate-x-0 translate-z-0 left-0' : '-translate-x-full md:translate-x-0 translate-z-0'}
             `}>
-                <div className={`
-                    h-full flex flex-col rounded-3xl overflow-hidden
-                    transition-all duration-300 border glass-3d
-                    ${isDark
-                        ? 'bg-midnight-900/40 border-white/[0.08] shadow-glass-dark'
-                        : 'bg-white/40 border-warm-200/50 shadow-depth'
-                    }
-                `}>
+                <div className="h-full flex flex-col rounded-[32px] overflow-hidden transition-all duration-300 border border-theme-border bg-theme-bg/80 backdrop-blur-3xl shadow-[5px_0_30px_rgba(0,0,0,0.5)]">
 
                     {/* ═══ Header / Logo ═══ */}
                     <div className="p-5 pb-4 flex items-center justify-between">
                         {!isCollapsed && (
                             <div className="flex items-center gap-3 animate-fade-in">
                                 <div className="relative">
-                                    <div className="p-2.5 bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-500 rounded-2xl shadow-lg shadow-violet-500/25">
-                                        <Sparkles className="w-5 h-5 text-white" />
+                                    <div className="p-2.5 bg-gold/10 border border-gold/20 rounded-2xl">
+                                        <Sparkles className="w-5 h-5 text-gold" />
                                     </div>
-                                    <div className="absolute -inset-0.5 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-2xl blur-lg opacity-30 -z-10" />
                                 </div>
                                 <div>
-                                    <span className="font-display font-extrabold text-xl tracking-tight gradient-text">
-                                        Aurem
+                                    <span className="font-serif italic font-light text-2xl tracking-wide text-theme-text select-none">
+                                        <span className="text-theme-primary not-italic mr-1">✦</span>
+                                        <span className="text-[#c9a55a]">Aurem</span>
                                     </span>
-                                    <p className="text-[10px] font-medium text-theme-muted -mt-0.5 tracking-wider uppercase">AI Study</p>
+                                    <p className="text-[9px] font-medium text-theme-muted mt-1 tracking-[0.2em] uppercase select-none">EdTech Platform</p>
                                 </div>
                             </div>
                         )}
                         <button
                             onClick={() => setIsCollapsed(!isCollapsed)}
-                            className={`p-2 rounded-xl transition-all duration-200 text-theme-muted
-                                ${isDark ? 'hover:bg-white/[0.06]' : 'hover:bg-warm-200/60'}
+                            className={`p-2 rounded-xl transition-colors duration-200 text-theme-muted hover:text-theme-primary hover:bg-theme-surface/50 cursor-none
                                 ${isCollapsed ? 'mx-auto' : ''}
                             `}
                         >
@@ -92,23 +85,25 @@ const Sidebar = ({ currentView, setCurrentView, isSidebarOpen, setIsSidebarOpen,
                                     key={item.id}
                                     onClick={() => {
                                         setCurrentView(item.id);
-                                        if (window.innerWidth < 768) setIsSidebarOpen(false);
+                                        // Auto-retract sidebar on navigation for both desktop and mobile
+                                        setIsSidebarOpen(false); // Mobile
+                                        if (window.innerWidth >= 768) {
+                                            setIsCollapsed(true); // Desktop
+                                        }
                                     }}
                                     style={{ animationDelay: `${index * 50}ms` }}
                                     className={`
-                                         w-full flex items-center gap-3 p-2.5 rounded-2xl transition-all duration-300 group relative
+                                         w-full flex items-center gap-3 p-2.5 rounded-2xl transition-all duration-300 group relative cursor-none
                                          ${isActive
-                                            ? `bg-gradient-to-r ${item.color} text-white shadow-xl ${item.glow} scale-[1.02]`
-                                            : isDark
-                                                ? 'text-white/50 hover:text-white hover:bg-white/[0.08]'
-                                                : 'text-warm-600 hover:text-warm-900 hover:bg-warm-200/60'
+                                            ? 'bg-gold/10 text-gold border border-gold/20'
+                                            : 'text-cream/50 hover:text-cream hover:bg-gold/5 border border-transparent'
                                         }
                                          ${isCollapsed ? 'justify-center px-0' : ''}
                                      `}
                                 >
                                     {/* Active indicator bar */}
                                     {isActive && !isCollapsed && (
-                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white/80 rounded-r-full" />
+                                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-gold rounded-r-full" />
                                     )}
 
                                     <div className={`
@@ -132,14 +127,14 @@ const Sidebar = ({ currentView, setCurrentView, isSidebarOpen, setIsSidebarOpen,
                     </nav>
 
                     {/* ═══ Footer Actions ═══ */}
-                    <div className={`p-3 space-y-1.5 border-t ${isDark ? 'border-white/[0.04]' : 'border-warm-300/30'}`}>
+                    <div className="p-3 space-y-1.5 border-t border-theme-border">
                         {/* Settings */}
                         <button
                             onClick={() => setCurrentView('settings')}
-                            className={`w-full p-2.5 rounded-xl flex items-center gap-3 transition-all duration-200
+                            className={`w-full p-2.5 rounded-xl flex items-center gap-3 transition-colors duration-200 cursor-none
                                 ${currentView === 'settings'
-                                    ? isDark ? 'bg-white/10 text-white' : 'bg-warm-200/70 text-warm-800'
-                                    : isDark ? 'text-white/50 hover:text-white hover:bg-white/[0.04]' : 'text-warm-500 hover:text-warm-700 hover:bg-warm-200/40'
+                                    ? 'bg-theme-surface text-theme-primary'
+                                    : 'text-theme-muted hover:text-theme-secondary hover:bg-theme-surface/50'
                                 }
                                 ${isCollapsed ? 'justify-center' : ''}
                             `}
@@ -148,73 +143,55 @@ const Sidebar = ({ currentView, setCurrentView, isSidebarOpen, setIsSidebarOpen,
                             {!isCollapsed && <span className="text-[13px] font-medium">Settings</span>}
                         </button>
 
-                        {/* Theme Toggle */}
-                        <button
-                            onClick={toggleMode}
-                            className={`w-full p-2.5 rounded-xl flex items-center gap-3 transition-all duration-200
-                                ${isDark ? 'text-white/50 hover:text-amber-400 hover:bg-amber-500/10' : 'text-warm-500 hover:text-indigo-600 hover:bg-indigo-50'}
-                                ${isCollapsed ? 'justify-center' : ''}
-                            `}
-                        >
-                            {isDark
-                                ? <Sun className="w-[18px] h-[18px]" />
-                                : <Moon className="w-[18px] h-[18px]" />
-                            }
-                            {!isCollapsed && <span className="text-[13px] font-medium">{isDark ? 'Light Mode' : 'Dark Mode'}</span>}
-                        </button>
+                        {/* Theme Toggle Removed */}
 
                         {/* Upgrade / Pro Badge */}
                         {!isPro && !isDevMode ? (
                             <button
                                 onClick={() => triggerUpgradeModal('upgrade')}
-                                className={`w-full p-2.5 rounded-2xl flex items-center gap-2.5 transition-all duration-300
-                                    bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white
-                                    shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30 hover:-translate-y-0.5
+                                className={`w-full p-2.5 rounded-xl flex items-center gap-2.5 transition-colors duration-300
+                                    bg-theme-primary text-theme-bg hover:bg-theme-secondary cursor-none
                                     ${isCollapsed ? 'justify-center' : ''}
                                 `}
                             >
                                 <Crown className="w-4 h-4" />
-                                {!isCollapsed && <span className="text-[13px] font-bold">Upgrade to Pro</span>}
+                                {!isCollapsed && <span className="text-[11px] uppercase tracking-[0.18em] font-medium">Upgrade</span>}
                             </button>
                         ) : (
                             !isCollapsed && (
-                                <div className={`flex items-center justify-center gap-2 py-1.5 rounded-xl ${isDark ? 'bg-amber-500/10' : 'bg-amber-50'}`}>
-                                    <Crown className="w-3.5 h-3.5 text-amber-500" />
-                                    <span className="text-[10px] font-bold text-amber-600 tracking-wider uppercase">Pro Active</span>
+                                <div className="flex items-center justify-center gap-2 py-1.5 rounded-xl border border-theme-primary/20 bg-theme-primary/[0.04]">
+                                    <Crown className="w-3.5 h-3.5 text-theme-primary" />
+                                    <span className="text-[9px] font-bold text-theme-primary tracking-[0.2em] uppercase">Pro Active</span>
                                 </div>
                             )
                         )}
 
                         {/* User Profile */}
-                        <div className={`flex items-center gap-3 p-2.5 rounded-2xl mt-1
-                            ${isDark ? 'bg-white/[0.03]' : 'bg-warm-200/30'}
+                        <div className={`flex items-center gap-3 p-2.5 rounded-xl border border-theme-border mt-1
+                            bg-theme-surface
                             ${isCollapsed ? 'justify-center' : ''}
                         `}>
                             <div className="relative">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-xs font-bold shadow-md">
+                                <div className="w-8 h-8 rounded-full bg-theme-primary/10 border border-theme-primary/30 flex items-center justify-center text-theme-primary font-serif italic text-sm shadow-md">
                                     {user?.displayName ? user.displayName[0].toUpperCase() : '?'}
                                 </div>
                                 {/* Online indicator */}
-                                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 border-2 border-current rounded-full"
-                                    style={{ borderColor: isDark ? '#0A0A0F' : '#FAF9F6' }}
-                                />
+                                <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#4ade80] rounded-full border border-[var(--surface)]" />
                             </div>
 
                             {!isCollapsed && (
                                 <>
                                     <div className="flex-1 min-w-0">
-                                        <p className={`text-xs font-semibold truncate ${isDark ? 'text-white' : 'text-warm-800'}`}>
+                                        <p className="text-[11px] font-medium tracking-wide truncate text-theme-text">
                                             {user?.displayName || 'User'}
                                         </p>
-                                        <p className="text-[10px] text-theme-muted truncate">
-                                            {user?.email || ''}
+                                        <p className="text-[9px] text-theme-muted truncate uppercase tracking-widest mt-0.5">
+                                            {user?.email || 'STUDENT'}
                                         </p>
                                     </div>
                                     <button
                                         onClick={onLogout}
-                                        className={`p-1.5 rounded-lg transition-all duration-200
-                                            ${isDark ? 'hover:bg-red-500/10 text-white/40 hover:text-red-400' : 'hover:bg-red-50 text-warm-400 hover:text-red-500'}
-                                        `}
+                                        className="p-1.5 rounded-lg transition-colors duration-200 text-theme-muted hover:text-theme-primary hover:bg-theme-primary/10 cursor-none"
                                     >
                                         <LogOut className="w-3.5 h-3.5" />
                                     </button>

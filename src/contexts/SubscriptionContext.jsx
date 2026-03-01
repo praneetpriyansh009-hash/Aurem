@@ -18,6 +18,16 @@ const BASIC_LIMITS = {
     // Doubt Solver and Document Study core are UNLIMITED
 };
 
+// Daily limits for Go tier
+const GO_LIMITS = {
+    'college-compass': 5,
+    'podcast': 5,
+    'quiz': 10,
+    'mindmap': 10,
+    'flashcards': 15,
+    'youtube': 2,
+};
+
 // Check if we're in dev/testing mode
 const isDevMode = () => {
     try {
@@ -30,7 +40,7 @@ const isDevMode = () => {
 const getDefaultTier = () => {
     try {
         const tier = import.meta.env.VITE_DEFAULT_TIER;
-        if (tier === 'pro' || tier === 'dev') return tier;
+        if (tier === 'pro' || tier === 'go' || tier === 'dev') return tier;
         return 'basic';
     } catch {
         return 'basic';
@@ -65,23 +75,29 @@ export const SubscriptionProvider = ({ children }) => {
                     const firestoreTier = userDoc.data().subscriptionTier;
                     console.log('[Subscription] Loaded from Firestore:', firestoreTier);
                     setTier(firestoreTier);
-                    // Sync to localStorage for faster future loads
                     localStorage.setItem(`aurem_tier_${currentUser.uid}`, firestoreTier);
                 } else {
                     // Check localStorage as fallback (and migrate to Firestore)
                     const storedTier = localStorage.getItem(`aurem_tier_${currentUser.uid}`);
                     if (storedTier === 'pro' || storedTier === 'dev') {
                         console.log('[Subscription] Migrating from localStorage to Firestore:', storedTier);
-                        setTier(storedTier);
-                        // Migrate to Firestore
-                        await setDoc(userDocRef, { subscriptionTier: storedTier }, { merge: true });
+                        // Migrate to Firestore, treating 'dev' as 'pro' for persistence
+                        await setDoc(userDocRef, {
+                            subscriptionTier: 'pro',
+                            upgradedAt: new Date().toISOString()
+                        }, { merge: true });
+
+                        // Persist locally to survive reload and update state
+                        if (currentUser?.uid) {
+                            localStorage.setItem(`aurem_tier_${currentUser.uid}`, 'pro');
+                        }
+                        setTier('pro');
                     } else {
                         setTier(getDefaultTier());
                     }
                 }
             } catch (error) {
                 console.error('[Subscription] Firestore load error:', error);
-                // Fallback to localStorage
                 const storedTier = localStorage.getItem(`aurem_tier_${currentUser.uid}`);
                 if (storedTier === 'pro' || storedTier === 'dev') {
                     setTier(storedTier);
@@ -130,19 +146,23 @@ export const SubscriptionProvider = ({ children }) => {
             return true;
         }
 
+        const limits = tier === 'go' ? GO_LIMITS : BASIC_LIMITS;
+
         // Features without limits (Doubt Solver, Document Study core)
-        if (!BASIC_LIMITS[feature]) {
+        if (limits[feature] === undefined) {
             return true;
         }
 
         // Check daily limit
         const currentUsage = dailyUsage[feature] || 0;
-        return currentUsage < BASIC_LIMITS[feature];
+        return currentUsage < limits[feature];
     };
 
     // Increment usage for a feature
     const incrementUsage = (feature) => {
-        if (!BASIC_LIMITS[feature]) return; // No tracking for unlimited features
+        const limits = tier === 'go' ? GO_LIMITS : BASIC_LIMITS;
+
+        if (limits[feature] === undefined) return; // No tracking for unlimited features
 
         setDailyUsage(prev => ({
             ...prev,
@@ -156,18 +176,34 @@ export const SubscriptionProvider = ({ children }) => {
             return Infinity;
         }
 
-        if (!BASIC_LIMITS[feature]) {
+        const limits = tier === 'go' ? GO_LIMITS : BASIC_LIMITS;
+
+        if (limits[feature] === undefined) {
             return Infinity;
         }
 
         const currentUsage = dailyUsage[feature] || 0;
-        return Math.max(0, BASIC_LIMITS[feature] - currentUsage);
+        return Math.max(0, limits[feature] - currentUsage);
     };
 
     // Trigger upgrade modal
     const triggerUpgradeModal = (feature) => {
         setUpgradeFeature(feature);
         setShowUpgradeModal(true);
+    };
+
+    // Upgrade to Go - persists to Firestore AND localStorage
+    const upgradeToGo = async () => {
+        setTier('go');
+        if (currentUser?.uid) {
+            localStorage.setItem(`aurem_tier_${currentUser.uid}`, 'go');
+            try {
+                const userDocRef = doc(db, 'users', currentUser.uid);
+                await setDoc(userDocRef, { subscriptionTier: 'go' }, { merge: true });
+            } catch (err) {
+                console.error('[Subscription] Firestore save error:', err);
+            }
+        }
     };
 
     // Upgrade to pro - persists to Firestore AND localStorage
@@ -184,7 +220,6 @@ export const SubscriptionProvider = ({ children }) => {
                 console.error('[Subscription] Firestore save error:', err);
             }
         }
-        setShowUpgradeModal(false);
     };
 
     // Downgrade to basic - persists to Firestore AND localStorage
@@ -213,12 +248,15 @@ export const SubscriptionProvider = ({ children }) => {
         setShowUpgradeModal,
         upgradeFeature,
         triggerUpgradeModal,
+        upgradeToGo,
         upgradeToPro,
         downgradeToBasic,
         isDevMode: isDevMode(),
+        isGo: tier === 'go',
         isPro: tier === 'pro' || tier === 'dev' || isDevMode(),
         isLoadingSubscription, // New: for loading states in UI
-        BASIC_LIMITS
+        BASIC_LIMITS,
+        GO_LIMITS
     };
 
     return (

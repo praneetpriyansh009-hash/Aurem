@@ -8,17 +8,13 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-                display: ['Outfit', 'Inter', 'sans-serif'],
+                sans: ['Jost', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                serif: ['"Cormorant Garamond"', 'ui-serif', 'Georgia', 'serif'],
+                mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
             },
             colors: {
-                // Premium Warm Light Mode
+                // Premium Warm Light Mode (Luminary)
                 warm: {
-                    50: '#FAF9F6',   // Warm ivory (main bg)
-                    100: '#F5F0EB',  // Slightly warmer (cards)
-                    200: '#EDE5DC',  // Warm sand (hover states)
-                    300: '#DDD3C7',  // Warm stone (borders)
-                    400: '#BFB0A0',  // Warm muted
                     500: '#9E8E7E',  // Mid warm
                     600: '#7A6B5D',  // Text secondary
                     700: '#5C4F43',  // Text primary
@@ -35,30 +31,53 @@ export default {
                     900: '#0A0A0F',  // Deep bg
                     950: '#050508',  // Deepest
                 },
-                // Brand Colors
+                // Brand Colors (Gold-centric)
                 brand: {
-                    primary: '#8B5CF6',    // Vibrant violet
-                    secondary: '#06B6D4',  // Cyan
-                    accent: '#F59E0B',     // Amber
+                    primary: '#c9a55a',    // Warm gold
+                    secondary: '#e0c07a',  // Light gold
+                    accent: '#a89880',     // Bark/muted gold
                     rose: '#F43F5E',       // Rose
                     emerald: '#10B981',    // Emerald
+                },
+                // Luminary Surfaces
+                surface: {
+                    DEFAULT: '#141009',
+                    2: '#1c1710',
+                },
+                gold: {
+                    DEFAULT: '#c9a55a',
+                    light: '#e0c07a',
+                    pale: 'rgba(201,165,90,0.12)',
+                },
+                cream: {
+                    DEFAULT: '#f0e8d8',
                 },
                 // Glass colors
                 glass: {
                     light: 'rgba(255, 255, 255, 0.6)',
                     dark: 'rgba(15, 15, 25, 0.6)',
-                    border: 'rgba(255, 255, 255, 0.08)',
-                }
+                    border: 'rgba(201, 165, 90, 0.08)',
+                },
+                // Dynamic theme variables mapped to CSS
+                theme: {
+                    bg: 'rgba(var(--theme-bg), <alpha-value>)',
+                    surface: 'rgba(var(--theme-surface), <alpha-value>)',
+                    text: 'rgba(var(--theme-text), <alpha-value>)',
+                    muted: 'rgba(var(--theme-muted), <alpha-value>)',
+                    primary: 'rgba(var(--theme-primary), <alpha-value>)',
+                    secondary: 'rgba(var(--theme-secondary), <alpha-value>)',
+                    border: 'rgba(var(--theme-border), <alpha-value>)',
+                },
             },
             boxShadow: {
-                'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+                'glass': '0 8px 32px 0 rgba(201, 165, 90, 0.04)',
                 'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.4)',
-                'glow': '0 0 20px rgba(139, 92, 246, 0.3)',
-                'glow-lg': '0 0 40px rgba(139, 92, 246, 0.25)',
-                'depth': '0 1px 2px rgba(0,0,0,0.05), 0 4px 12px rgba(0,0,0,0.04), 0 12px 28px rgba(0,0,0,0.03)',
-                'depth-lg': '0 2px 4px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.06), 0 24px 48px rgba(0,0,0,0.05)',
-                'float': '0 20px 60px rgba(0,0,0,0.12)',
-                'inner-glow': 'inset 0 1px 0 rgba(255,255,255,0.1)',
+                'glow': '0 0 20px rgba(201, 165, 90, 0.15)',
+                'glow-lg': '0 0 40px rgba(201, 165, 90, 0.1)',
+                'depth': '0 1px 2px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.12), 0 12px 28px rgba(0,0,0,0.08)',
+                'depth-lg': '0 2px 4px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.15), 0 24px 48px rgba(0,0,0,0.1)',
+                'float': '0 20px 60px rgba(0,0,0,0.3)',
+                'inner-glow': 'inset 0 1px 0 rgba(201,165,90,0.08)',
             },
             borderRadius: {
                 '4xl': '2rem',
@@ -131,8 +150,8 @@ export default {
                     '50%': { transform: 'translateY(-10px)' },
                 },
                 pulseGlow: {
-                    '0%, 100%': { boxShadow: '0 0 5px rgba(139,92,246,0.2)' },
-                    '50%': { boxShadow: '0 0 25px rgba(139,92,246,0.4)' },
+                    '0%, 100%': { boxShadow: '0 0 5px rgba(201,165,90,0.2)' },
+                    '50%': { boxShadow: '0 0 25px rgba(201,165,90,0.3)' },
                 },
                 bounceSoft: {
                     '0%, 100%': { transform: 'translateY(0)' },
