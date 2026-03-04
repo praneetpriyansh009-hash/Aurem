@@ -13,12 +13,14 @@ import { callGemini } from './geminiClient';
 import { callGroq } from './groqClient';
 
 // Shared message formatter (OpenAI-style, works for both Gemini & Groq)
-export const formatGroqPayload = (userContent, systemContent) => {
+export const formatGroqPayload = (userContent, systemContent, options = {}) => {
     return {
         messages: [
             { role: "system", content: systemContent },
             { role: "user", content: userContent }
-        ]
+        ],
+        ...(options.temperature !== undefined && { temperature: options.temperature }),
+        ...(options.max_tokens !== undefined && { max_tokens: options.max_tokens }),
     };
 };
 export const formatGeminiPayload = formatGroqPayload;
@@ -42,7 +44,10 @@ export const retryableFetch = async (url, options = {}, retries = 2) => {
                 if (isGroqModel) {
                     console.log('[AI] Calling Groq directly...');
                     const hasImage = payload.messages.some(m => Array.isArray(m.content) && m.content.some(c => c.type === 'image_url'));
-                    const result = await callGroq(payload.messages, payload.model, hasImage);
+                    const result = await callGroq(payload.messages, payload.model, hasImage, {
+                        temperature: payload.temperature,
+                        max_tokens: payload.max_tokens
+                    });
                     if (result && result.choices && result.choices.length > 0) {
                         return result;
                     }

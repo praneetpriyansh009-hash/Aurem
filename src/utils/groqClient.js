@@ -5,7 +5,7 @@
 
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || import.meta.env.GROQ_API_KEY || "";
 
-export async function callGroq(messages, model, isVision = false) {
+export async function callGroq(messages, model, isVision = false, options = {}) {
     if (!GROQ_API_KEY) throw new Error("Missing VITE_GROQ_API_KEY in .env");
 
     let groqModel = model || "llama-3.3-70b-versatile";
@@ -20,7 +20,8 @@ export async function callGroq(messages, model, isVision = false) {
     const payload = {
         model: groqModel,
         messages: messages,
-        temperature: 0.4,
+        temperature: options.temperature ?? 0.4,
+        max_tokens: options.max_tokens ?? 4096,
     };
 
     const response = await fetch(url, {

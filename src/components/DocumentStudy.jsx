@@ -313,6 +313,7 @@ const DocumentStudy = ({ onNavigate }) => {
 
     // --- Refs ---
     const fileInputRef = useRef(null);
+    const retinaInputRef = useRef(null);
     const chatEndRef = useRef(null);
 
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
@@ -663,13 +664,14 @@ You are writing a comprehensive textbook chapter.`;
                     {[
                         { id: 'chapter', title: 'Study a Chapter', desc: 'AI-guided deep dive into any topic', icon: BookOpen },
                         { id: 'document', title: 'Upload Document', desc: 'PDFs or Text files', icon: FilePlus },
-                        { id: 'retina', title: 'Aurem Retina', desc: 'Scan handwritten notes & diagrams', icon: Zap, disabled: true }
+                        { id: 'retina', title: 'Aurem Retina', desc: 'Scan handwritten notes & diagrams', icon: Zap, disabled: false }
                     ].map(card => (
                         <div
                             key={card.id}
                             onClick={() => {
                                 if (card.disabled) return;
-                                if (card.id === 'document' || card.id === 'retina') fileInputRef.current?.click();
+                                if (card.id === 'document') fileInputRef.current?.click();
+                                if (card.id === 'retina') retinaInputRef.current?.click();
                                 if (card.id === 'chapter') setIsChapterModalOpen(true);
                             }}
                             className={`group relative p-8 rounded-[24px] border border-theme-border bg-theme-surface hover:border-theme-primary/30 transition-all duration-500 overflow-hidden flex flex-col h-full hover:-translate-y-1 shadow-depth ${card.disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-none'}`}
@@ -768,6 +770,7 @@ You are writing a comprehensive textbook chapter.`;
             }
 
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} />
+            <input ref={retinaInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
         </div >
     );
 
@@ -999,7 +1002,7 @@ You are writing a comprehensive textbook chapter.`;
                             onClick={() => {
                                 if (item.disabled) return;
                                 if (item.id === 'retina_study') {
-                                    fileInputRef.current?.click();
+                                    retinaInputRef.current?.click();
                                 } else {
                                     setActiveSection(item.id);
                                 }
