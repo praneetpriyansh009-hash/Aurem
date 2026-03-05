@@ -22,7 +22,9 @@
         "google-tts-api": "^0.0.6",
         "grok-sdk": "^0.0.1-security",
         "helmet": "^8.1.0",
+        "hpp": "^0.2.3",
         "html2canvas": "^1.4.1",
+        "ioredis": "^5.10.0",
         "jsonwebtoken": "^9.0.2",
         "jspdf": "^4.2.0",
         "kokoro-js": "^1.2.1",
@@ -30,8 +32,11 @@
         "mongoose": "^8.2.1",
         "node-fetch": "^3.3.2",
         "pdfjs-dist": "^4.0.379",
+        "rate-limit-redis": "^4.3.1",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
+        "xss-clean": "^0.1.4",
+        "youtube-transcript": "^1.2.1",
         "zod": "^3.22.4"
     },
     "devDependencies": {
