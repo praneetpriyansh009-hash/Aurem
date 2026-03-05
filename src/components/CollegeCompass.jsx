@@ -256,7 +256,7 @@ const CollegeCompass = ({ retryableFetch }) => {
         try {
             const profileBlock = buildProfileBlock();
             const text = await callAI(
-                `Analyze this student's profile and create a comprehensive, personalized career roadmap.
+                `Analyze this student's profile and create a highly dynamic, out-of-the-box personalized career roadmap. Do not stick to generic or fixed lists of careers. Think expansively.
 
 --- STUDENT PROFILE (ACTIVE FORM) ---
 Hobbies & Interests: ${careerForm.hobbies}
@@ -267,15 +267,16 @@ Budget Constraints: ${careerForm.budget || 'Not specified'}
 Preferred Country: ${careerForm.country || 'Open to any'}
 --- END ACTIVE FORM ---
 ${profileBlock}
+
 Provide:
-## 🎯 Top 3 Career Paths
-For each: name, why it fits THIS SPECIFIC student (reference their hobbies and passions BY NAME), salary range (entry/mid/senior), growth outlook 2025-2035.
+## 🎯 Top 5-8 Dynamic Career Paths
+For each: name, why it fits THIS SPECIFIC student (merge their hobbies and passions in unique ways), salary range, and future growth.
 
 ## 📚 Education Roadmap
 Degree recommendations, certifications, online courses, bootcamps.
 
 ## 🏆 Skills to Build
-Technical + soft skills with specific resources (courses, books, platforms).
+Technical + soft skills with specific resources.
 
 ## 🌍 Global Opportunities
 Best countries/cities for each career, remote work potential, visa-friendly nations.
@@ -283,23 +284,18 @@ Best countries/cities for each career, remote work potential, visa-friendly nati
 ## 💡 Action Plan (Next 12 Months)
 Month-by-month breakdown of concrete steps.
 
-## ⚡ Hidden Gems
-Unconventional paths, emerging roles, or interdisciplinary opportunities most people miss.
+## ⚡ Hidden & Emerging Gems
+Unconventional paths, AI-integrated roles, or interdisciplinary opportunities most people miss.
 
 Format with clear headers, emojis, and actionable bullet points.`,
-                `You are the world's best AI Career Architect. You combine data from LinkedIn trends, Bureau of Labor Statistics, Glassdoor, and global employment data.
-
+                `You are the world's most dynamic AI Career Architect.
 CRITICAL RULES:
-- You MUST deeply analyze and synthesize ALL of the user's hobbies, passions, field of study, AND aspirations. Do not fixate on just 1-2 keywords.
-- Every single career path you recommend MUST explicitly reference at least 2 different things the student mentioned (e.g. if they said "robotics" and "climate change", suggest roles that combine both).
-- If a STUDENT PROFILE block is provided, you MUST read and use ALL data in it, including uploaded documents.
-- Do NOT give generic career paths like "Software Engineer" without explaining how their SPECIFIC passions and hobbies make them uniquely suited.
-- If the student mentions multiple interests, find INTERDISCIPLINARY careers that blend them.
-- Be specific with company names, salary data, and growth projections.
-- Use clear Markdown formatting with emojis.`
+- Deeply synthesize ALL of the user's inputs. Do NOT give generic paths (e.g. "Software Engineer"). Break constraints and suggest interdisciplinary, future-proof careers.
+- Read and use ALL data in the STUDENT PROFILE.
+- Output 5 to 8 unique career ideas.
+- Use clear Markdown with emojis.`
             );
             setCareerResult(text);
-            // Extract career goals from AI response for profile
             updateProfile({ careerGoals: text.substring(0, 500) });
             incrementUsage('college-compass');
         } catch (err) { setCareerResult("Error: " + err.message); }
@@ -313,7 +309,6 @@ CRITICAL RULES:
         setIsLoading(true);
         setCollegeResult('');
         setCitations([]);
-        // Save to shared profile
         updateProfile({
             gpa: collegeForm.gpa,
             testScores: collegeForm.testScores,
@@ -323,7 +318,7 @@ CRITICAL RULES:
         try {
             const profileBlock = buildProfileBlock();
             const text = await callAI(
-                `Analyze this student profile and provide the most comprehensive college recommendation in the world.
+                `Analyze this student profile and provide the most comprehensive, brutally honest college recommendation in the world.
 
 --- STUDENT PROFILE (ACTIVE FORM) ---
 GPA/Marks: ${collegeForm.gpa}
@@ -336,42 +331,34 @@ Preferred Country: ${collegeForm.country}
 Budget: ${collegeForm.budget || 'Not specified'}
 --- END ACTIVE FORM ---
 ${profileBlock}
-CRITICAL: You MUST read the student's Extracurriculars field AND any uploaded documents above. For EVERY college you recommend, you MUST explain in 1-2 sentences WHY that college specifically values what THIS student has done. For example, if they mention "debate club captain", recommend schools known for strong debate programs.
 
-Provide a DETAILED analysis:
+CRITICAL INSTRUCTIONS FOR WEAK PROFILES:
+If the student has NO test scores (SAT/ACT/AP/JEE), low GPA, or weak extracurriculars, DO NOT recommend MIT, Stanford, Harvards, or top-tier schools. Instead, output a "🛑 HARSH REALITY CHECK" section right at the top. Tell them bluntly that top schools are impossible right now, and FORCE them to start using the "Competitive Prep / Preparation Hub" in this app to take SAT/ACT/AP or other standardized exams to build their stats. 
 
-## 🔒 Safety Schools (3 colleges)
-For each: Name, Location, Acceptance Rate, WHY IT FITS THIS STUDENT'S EXTRACURRICULARS, Tuition, Unique Advantage, Notable Alumni.
+COLLEGE LIST (Provide 20-30 Realistic Colleges):
+Group these 20-30 colleges into realistic tiers based strictly on their actual stats. Look beyond just America if they chose "Any" or a different country. For EACH college, explain in 1 sentence WHY it fits their specific extracurriculars or constraints in the profile.
 
-## 🎯 Target Schools (3 colleges)
-Same format as above. DIFFERENT colleges from common recommendations.
+## 🛑 HARSH REALITY CHECK & RESUME MANDATE
+(Only include if stats are weak/missing. Instruct them to use the Preparation Hub immediately to fix their testing and extracurricular gaps for guaranteed admission).
 
-## 🚀 Reach/Dream Schools (2 colleges)
-Same format as above.
+## 🔒 Safety Schools (10-15 colleges)
+Name, Location, Acceptance Rate, Fit Reason.
 
-## 📊 Acceptance Probability Analysis
-Table-style breakdown with estimated chances (High/Medium/Low) and reasoning tied to their specific profile.
+## 🎯 Target Schools (5-10 colleges)
+Name, Location, Acceptance Rate, Fit Reason.
 
-## 💰 Financial Breakdown
-Tuition comparison, scholarship opportunities at each school, cost of living.
+## 🚀 Reach Schools (2-5 colleges - ONLY if realistic)
+Name, Location, Acceptance Rate, Fit Reason.
 
-## 📝 Application Strategy
-Timeline, required documents, tips for each school, ED/EA recommendations.
-
-## 🌟 Hidden Gems
-2-3 lesser-known but excellent programs that perfectly match THIS student's extracurriculars.
-
-Use the latest available data. Be specific with numbers, rankings, and percentages.`,
-                `You are the world's most knowledgeable AI College Admissions Consultant, combining data from US News, QS World Rankings, THE Rankings, Niche, CollegeBoard, and UCAS.
-
+## 📊 Probability Analysis & Financial Breakdown
+Brief summary of chances, tuition, and basic scholarship advice.`,
+                `You are the world's most knowledgeable and brutally honest AI College Admissions Consultant.
 CRITICAL RULES:
-- You MUST evaluate the student HOLISTICALLY. Do NOT just match on GPA and Major.
-- You MUST explicitly reference the student's SPECIFIC Extracurriculars and Achievements when justifying WHY each college is a fit.
-- If the student has uploaded documents (resume, achievement list, etc.), you MUST read and incorporate that information.
-- If the student mentions specific activities (e.g. "robotics club president", "debate champion"), recommend colleges known for strong programs in those specific activities and explain the connection.
-- Do NOT repeat the same 2-3 generic colleges every time. Provide a DIVERSE range covering different tiers, geographies, and specializations.
-- Every recommendation MUST include specific numbers (acceptance rates, tuition, rankings).
-- Use clear Markdown with emojis for visual hierarchy.`
+- Provide up to 20-30 colleges total.
+- If stats are weak, you MUST reject top-tier Ivies/Stanford immediately. Break their illusions gracefully but firmly, and TELL them to use the "Preparation Hub" to fix their SAT/ACT/AP stats.
+- Match colleges to their exact extracurriculars and documents.
+- Provide international diversity if the country is open. Don't default to only US.
+- Use clear Markdown formatting with emojis.`
             );
             setCollegeResult(text);
             incrementUsage('college-compass');
@@ -807,51 +794,45 @@ You MUST WRITE the actual essay draft based on the student's profile context pro
         if (!canUseFeature('college-compass')) { triggerUpgradeModal('college-compass'); return; }
         setIsLoading(true);
         setEssayPhase('coach');
-        setEssayResult("Deeply rewriting your draft based on ALL accumulated feedback...");
+        setEssayResult("Deeply rewriting your draft based on the latest strict feedback...");
 
         try {
-            // Build a numbered checklist of ALL issues ever raised
-            const allFeedback = essayFeedbackHistory.length > 0
-                ? essayFeedbackHistory.map((fb, i) => `--- ITERATION ${i + 1} FEEDBACK ---\n${fb}\n--- END ---`).join('\n\n')
-                : `--- LATEST FEEDBACK ---\n${essayResult}\n--- END ---`;
+            // Focus heavily on the LATEST feedback to ensure forward progress
+            const latestFeedback = essayFeedbackHistory.length > 0
+                ? essayFeedbackHistory[essayFeedbackHistory.length - 1]
+                : essayResult;
 
             const text = await callAI(
                 `Target School(s): ${essaySchool || 'Not specified'}
 Essay Type: ${essayType}
 Word Limit: ${essayWordLimit || 'Not specified'}
-Desired Tone: ${essayTone}
-Core Trait: ${essayTrait || 'Not specified'}
-Key Story: ${essayStory || 'Not specified'}
 
---- CURRENT DRAFT ---
+--- YOUR CURRENT DRAFT ---
 ${essayText}
 --- END DRAFT ---
 
---- ALL ACCUMULATED FEEDBACK FROM PREVIOUS ITERATIONS ---
-${allFeedback}
---- END ALL FEEDBACK ---
+--- THE RUDE STRICT REVIEWER'S LATEST VERDICT & DEMANDS ---
+${latestFeedback}
+--- END VERDICT ---
 
-You MUST rewrite the ENTIRE essay from scratch. Follow these rules:
-1. Read EVERY piece of feedback above. Create a mental checklist of EVERY specific issue mentioned.
-2. Address EACH issue one by one. Do not skip any.
-3. If the feedback says a sentence is weak, REWRITE that sentence completely — don't just rephrase it.
-4. If the feedback says the hook is generic, create an ENTIRELY NEW opening that is vivid and specific.
-5. If the feedback says there are clichés, REMOVE every single one and replace with original language.
-6. Preserve everything the feedback marked as "strong" or "good".
-7. The result must be a COMPLETE, polished essay — not fragments or notes.`,
-                `You are a world-class college admissions essay ghostwriter.
+You MUST rewrite the ENTIRE essay from scratch to fix EVERY SINGLE issue raised by the reviewer above.
+1. DO NOT DOWNGRADE the essay. Keep the good parts, elevate the weak parts.
+2. If the reviewer called out clichés or "AI polish", REMOVE THEM. Write with raw, authentic teenage voice.
+3. If the reviewer demanded specific sensory details or a better hook, INVENT plausible, highly specific details that fit the narrative.
+4. Ensure the essay aligns with the COFFEE and PASS frameworks (Problem Space, Authenticity, Specificity).
+5. The result must be a COMPLETE, polished essay ready for submission.`,
+                `You are a world-class college admissions essay ghostwriter working alongside the "Strict Reviewer".
 
-CRITICAL: You are not making small edits. You are REWRITING this essay to be genuinely excellent.
+CRITICAL: You are REWRITING this essay to score a perfect 10/10 on the Reviewer's strict rubric.
 - Every sentence must earn its place. Cut filler ruthlessly.
-- Use show-don't-tell: replace "I learned resilience" with a specific vivid moment.
+- Use "show, don't tell": replace "I learned resilience" with a specific vivid action.
 - The hook must grab attention in the first 5 words.
 - The conclusion must circle back to the opening with emotional resonance.
-- Voice: authentic to a smart teenager, not a thesaurus.
-- Output ONLY the essay text. No meta-commentary, no "Here is..." prefixes.`
+- Output ONLY the raw essay text. No meta-commentary, no titles, no "Here is..." prefixes.`
             );
 
             setEssayText(text);
-            setEssayResult("Draft rewritten addressing all feedback! Hit 'Grade Again' to verify the improvements.");
+            setEssayResult("Draft rewritten addressing the strict feedback! Hit 'Grade Again' to verify the improvements with the reviewer.");
             incrementUsage('college-compass');
         } catch (err) { setEssayResult("Error auto-fixing draft: " + err.message); }
         finally { setIsLoading(false); }
