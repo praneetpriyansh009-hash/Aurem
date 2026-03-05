@@ -21,6 +21,14 @@ export const verifyToken = async (req, res, next) => {
     } catch (error) {
         console.warn('Token verification failed:', error.message);
 
+        // Detect if Firebase Admin wasn't initialized (missing FIREBASE_SERVICE_ACCOUNT env var)
+        if (error.message && error.message.includes('default Firebase app does not exist')) {
+            return res.status(500).json({
+                error: 'Backend Setup Incomplete',
+                details: 'Please add FIREBASE_SERVICE_ACCOUNT and VITE_GROQ_API_KEY to your Vercel Environment Variables.'
+            });
+        }
+
         // "Fix them once and for all": Allow local development to proceed even if token fails
         // This is safe because production checks process.env.NODE_ENV
         if (process.env.NODE_ENV !== 'production') {

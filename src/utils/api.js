@@ -87,9 +87,13 @@ export const retryableFetch = async (url, options = {}, retries = 2) => {
         const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
+            const errorMessage = data.error
+                ? (data.details ? `${data.error}: ${data.details}` : data.error)
+                : data.message || `HTTP ${response.status} error.`;
+
             return {
                 ...data,
-                error: data.error || data.message || `HTTP ${response.status} error.`
+                error: errorMessage
             };
         }
 
