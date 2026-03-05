@@ -368,17 +368,7 @@ const DoubtSolver = ({ retryableFetch }) => {
                                     )}
                                 </div>
 
-                                {msg.canEradicate && (
-                                    <div className={`mt-4 pt-3 flex justify-end border-t border-theme-border`}>
-                                        <button
-                                            onClick={() => handleEradicateDoubt(msg.topicContext)}
-                                            className="px-3.5 py-1.5 bg-gradient-to-r from-theme-primary to-theme-secondary text-theme-bg text-[11px] font-bold rounded-xl shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2"
-                                        >
-                                            <RefreshCw className="w-3.5 h-3.5" />
-                                            Eradicate Doubt
-                                        </button>
-                                    </div>
-                                )}
+
                             </div>
                         </div>
                     </div>
