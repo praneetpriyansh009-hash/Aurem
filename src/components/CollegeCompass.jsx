@@ -1785,6 +1785,19 @@ CRITICAL: If the profile is mostly empty (e.g. they didn't use the Career or Col
                     {/* ═══ ESSAY EXPERT TAB (MERGED: Coach + Grader) ═══ */}
                     {activeTab === 'essay' && (
                         <div className="animate-fade-in space-y-6 relative">
+                            {/* ── UNDER DEVELOPMENT BANNER ── */}
+                            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 animate-slide-up">
+                                <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <span className="text-xl">🚧</span>
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-black text-amber-400 uppercase tracking-widest mb-1">Under Development</h4>
+                                    <p className="text-xs text-theme-muted leading-relaxed">
+                                        Essay generation quality is currently limited due to the low-quality AI model powering this feature. Essays may lack depth, repeat patterns, or degrade across iterations.
+                                        We are actively upgrading to a premium model that will deliver <strong className="text-amber-400">Ivy-level essay writing</strong>. Stay tuned — a major upgrade is coming soon.
+                                    </p>
+                                </div>
+                            </div>
                             <form onSubmit={handleEssaySubmit} className={`glass-panel p-6 rounded-3xl shadow-2xl border bg-theme-surface border-theme-border relative overflow-hidden`}>
                                 <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-amber-500 to-rose-500" />
                                 <div className="flex items-center gap-3 mb-6">
