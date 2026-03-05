@@ -889,7 +889,7 @@ Start with: "College Compass Essay Coach — analyzing your draft…"`
         finally { setIsLoading(false); }
     };
 
-    // ─── HARSH GRADER (within Essay Expert) ───
+    // ─── HARSH GRADER (Essay Maker Pro - Rude Strict Reviewer) ───
     const handleGraderSubmit = async () => {
         if (!essayText.trim()) return;
         if (!canUseFeature('college-compass')) { triggerUpgradeModal('college-compass'); return; }
@@ -898,71 +898,121 @@ Start with: "College Compass Essay Coach — analyzing your draft…"`
         const iteration = essayIteration + 1;
         setEssayIteration(iteration);
         try {
-            // Build previous feedback context for verification
             const prevFeedbackContext = essayFeedbackHistory.length > 0
-                ? `\n\n--- PREVIOUS ITERATION FEEDBACK (VERIFY THESE WERE FIXED) ---\n${essayFeedbackHistory[essayFeedbackHistory.length - 1]}\n--- END PREVIOUS FEEDBACK ---\n\nYou MUST check: Were the specific issues from the previous feedback ACTUALLY fixed in this new version? If yes, acknowledge it. If not, call it out.`
+                ? `\n\n--- PREVIOUS ROUND FEEDBACK (VERIFY IF THEY ACTUALLY FIXED THIS) ---\n${essayFeedbackHistory[essayFeedbackHistory.length - 1]}\n--- END PREVIOUS FEEDBACK ---\n\nIf they didn't fix the exact issues from last time, INSULT their lack of attention to detail and drop their score.`
                 : '';
 
             const text = await callAI(
-                `ITERATION ${iteration}. Grade this essay. Attempt #${iteration}.\n\n--- STUDENT ESSAY ---\n${essayText}\n--- END ---${prevFeedbackContext}`,
-                `You are an expert college essay grader. You are STRICT but FAIR. Your job is to genuinely help the student reach excellence.
+                `Target School: ${essaySchool}\nEssay Type: ${essayType}\n\n--- STUDENT ESSAY DRAFT ---\n${essayText}\n--- END DRAFT ---${prevFeedbackContext}`,
+                `You are Essay Maker Pro's "Rude Strict Reviewer". You 10x better than Kollege.ai. Your explicit goal is to get students with weak stats (low GPA/scores) into Ivies/Stanford/MIT WITH scholarships by forcing them to write undeniably authentic, memorable, red-flag-free essays.
 
-CRITICAL GRADING RULES:
-- Grade the essay ON ITS OWN MERITS. Read it fresh and evaluate the actual writing quality.
-- If previous feedback was provided, CHECK whether those specific issues were fixed. List which ones were fixed and which weren't.
-- Quote EXACT sentences when pointing out issues OR praising strengths.
-- A genuinely good essay with a compelling hook, clear narrative arc, emotional depth, specific details, and no clichés DESERVES an 8, 9, or 10.
-- Do NOT artificially cap the score. If the essay is excellent, say so.
-- Do NOT invent problems that don't exist just to seem harsh.
-- A 10/10 essay is one you'd confidently submit to Harvard. It's rare but achievable.
-- An 8/10 essay is strong enough to submit to most schools.
+You are BRUTAL, HARSH, NITPICKY, and BLUNT. If it sounds like AI polish, cliché garbage, or a resume-restatement, TRASH IT. Call them out. Insult the writing if it's boring ("This is garbage—sounds like a robot wrote it, fix your fake voice or you'll get rejected everywhere!"). 
 
-SCORING GUIDE (based on actual quality, not iteration number):
-- 1-3: Fundamentally broken (no structure, no story, all clichés)
-- 4-5: Has potential but major issues (weak hook, generic language, unclear theme)
-- 6-7: Decent but needs polish (some strong moments but inconsistent execution)
-- 8: Strong essay ready for most applications
-- 9: Excellent — compelling, authentic, memorable
-- 10: Outstanding — would make an admissions officer stop and read twice
+CRITICAL GRADING RUBRIC (Score 1-10 for each):
+1. Authenticity (Messy/human? Or AI polish?)
+2. Memorability (PASS test passed? Direction clear?)
+3. Narrative Strength (COFFEE framework aligned?)
+4. Red Flag Avoidance (No exaggerations or trophy-collecting?)
+5. Voice/Rhythm (UNIQUE drills? Sensory details?)
+6. School Fit (Specific CHOICE buckets?)
+7. Merit Emphasis (Neutral, achievement-first for 2026 trends?)
+8. Overall Perfection
 
-Response format:
-## 💀 SCORE: X/10
-One sentence honest assessment.
-${iteration > 1 ? '## ✅ Issues Fixed From Last Round\nList specific improvements you can verify.\n' : ''}## 🔥 What Still Needs Work (if any)
-Be specific. Quote weak sentences.
-## 💪 What's Genuinely Strong
-Quote the best lines.
-## 📌 Specific Fixes Required (if score < 9)
-Numbered list of exact changes needed.
-## ⚡ Verdict
-"RESUBMIT — X issues remaining" if under 8. "APPROVED FOR DOWNLOAD ✅" if 8+.
+OUTPUT EXACTLY THIS FORMAT:
+## 💀 BRUTAL VERDICT
+[Your incredibly blunt, unforgiving assessment of why this essay would currently be rejected or accepted]
 
-Start: "Essay Grader — Iteration ${iteration} — Let's see what you've got…"`
+## 📊 THE GAUNTLET SCORES
+- Authenticity: X/10
+- Memorability: X/10
+- Narrative Strength: X/10
+- Red Flags: X/10
+- Voice/Rhythm: X/10
+- School Fit: X/10
+- Merit Emphasis: X/10
+- **OVERALL PERFECTION: X/10**
+
+## 🛑 FATAL FLAWS & EXACT FIXES REQUIRED
+[If Overall is < 10, list EXACT, specific sentences to rewrite and HOW to fix them. Be mean about it if it's cliché.]
+
+## ⚡ FINAL RULING
+[If Overall < 10]: "RESUBMIT — This is not Ivy-level yet. Fix it."
+[If Overall == 10]: "PERFECT ESSAY ACHIEVED ✅ — This raw, evidence-backed narrative guarantees admission and overrides your weak stats because [explain why]."
+
+Start immediately with "Reviewer Iteration ${iteration}: "`
             );
 
-            // Store this feedback in history for future iterations
             setEssayFeedbackHistory(prev => [...prev, text]);
             setEssayResult(text);
-            const scoreMatch = text.match(/SCORE:\s*(\d+)/i);
-            if (scoreMatch) setEssayScore(parseInt(scoreMatch[1]));
+            const scoreMatch = text.match(/OVERALL PERFECTION:\s*(\d+(\.\d+)?)/i);
+            if (scoreMatch) setEssayScore(parseFloat(scoreMatch[1]));
             incrementUsage('college-compass');
         } catch (err) { setEssayResult("Error: " + err.message); }
         finally { setIsLoading(false); }
     };
 
-    // ─── PDF DOWNLOAD ───
+    // ─── PDF DOWNLOAD (COMPREHENSIVE STRATEGY REPORT) ───
     const handlePdfDownload = async () => {
-        const element = essayPdfRef.current;
-        if (!element) return;
+        if (!essayText) return;
+        setIsLoading(true);
+        setEssayResult("Generating comprehensive final strategy report for download...");
         try {
-            const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff' });
-            const imgData = canvas.toDataURL('image/png');
+            const profileStr = buildProfileBlock();
+
+            const summaryReq = `Based on the following student profile and final essay draft, generate a **Comprehensive Admission & Scholarship Strategy Report**.
+            
+PROFILE & CONTEXT:
+${profileStr}
+
+CURRENT ESSAY DRAFT:
+${essayText}
+
+Create a structured plain-text report (NO MARKDOWN symbols like ** or ##, just use ALL CAPS for headings) covering:
+1. STUDENT PROFILE SUMMARY (A brief overview of their strengths)
+2. RECOMMENDED CAREER PATH (Based on their skills/interests)
+3. TARGET COLLEGES & STRATEGY (Specific schools that fit them)
+4. SCHOLARSHIP OPPORTUNITIES (Financial aid strategies based on their profile)
+5. FINAL ADMISSION ESSAY (Print the full essay provided above)
+
+CRITICAL: If the profile is mostly empty (e.g. they didn't use the Career or College tabs first), tell them exactly what they should explore and what steps they must take next in those specific areas. Do not leave sections blank. Write clearly and professionally. Use newlines to separate paragraphs. STRICTLY NO MARKDOWN ASTERISKS.`;
+
+            const fullReportText = await callAI(summaryReq, "You are Essay Maker Pro's lead counselor generating the absolute final PDF export for the student.");
+
+            // Create PDF using jsPDF text wrapping
             const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save('Aurem_Perfect_Essay.pdf');
-        } catch (err) { console.error('PDF generation failed:', err); }
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(11);
+
+            const lines = pdf.splitTextToSize(fullReportText, 170); // 170mm width
+            let y = 20;
+            const pageHeight = pdf.internal.pageSize.getHeight();
+
+            // Add a title header
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(16);
+            pdf.text("Aurem Admission & Scholarship Strategy Report", 15, y);
+            y += 15;
+
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(11);
+
+            for (let i = 0; i < lines.length; i++) {
+                if (y > pageHeight - 20) {
+                    pdf.addPage();
+                    y = 20;
+                }
+                pdf.text(lines[i], 15, y);
+                y += 6;
+            }
+
+            pdf.save('Aurem_Admission_Strategy_Report.pdf');
+            setEssayResult("Complete Strategy Report downloaded successfully! ✅ Check your downloads folder.");
+        } catch (err) {
+            setEssayResult("Error generating PDF report: " + err.message);
+            console.error('PDF generation failed:', err);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // ─── ADMISSIONS CHAT ───
